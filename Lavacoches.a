@@ -1,0 +1,410 @@
+; PROYECTO
+;-----------------------------------------------------------------------
+;Se defienen las EQUs
+
+ESTADO    EQU 30H       ; Variable para el estado actual (en RAM interna)
+EVENTO    EQU 31H       ; Variable para el evento actual (en RAM interna)
+
+; Definiciones de puertos
+; Puerto 0
+SEM_VERDE   EQU P0.0     ; Semáforo verde 0x80.0
+SEM_ROJO    EQU P0.1     ; Semáforo rojo 0x80.1
+S_PLAT      EQU P0.2     ; Sensor de coche en plataforma
+FICHA_TIPO  EQU P0.3     ; Tipo de ficha (1: intensivo, 0: normal)
+S_FICHA     EQU P0.4     ; Sensor de ficha introducida
+P_START     EQU P0.5     ; Botón de inicio
+AL_START    EQU P0.6     ; Alarma activa
+BPOS_START  EQU P0.7     ; Fin de carrera del puente en posición inicial
+
+; Puerto 1
+BMOV_FRONT  EQU P1.0     ; Movimiento del puente hacia adelante
+BMOV_BACK   EQU P1.1     ; Movimiento del puente hacia atrás
+FC_RH_TOP   EQU P1.2     ; Fin de carrera del rodillo horizontal en parte alta
+RH_UPTO     EQU P1.3     ; Mueve el rodillo horizontal hacia arriba
+RH_DOWNTO   EQU P1.4     ; Mueve el rodillo horizontal hacia abajo
+FC_RV_BORDE EQU P1.5     ; Fin de carrera de rodillos verticales en posición externa
+RV_OUTTO    EQU P1.6     ; Mueve los rodillos verticales hacia afuera
+RV_INTO     EQU P1.7     ; Mueve los rodillos verticales hacia adentro
+
+; Puerto 2
+EV_AGUA     EQU P2.0     ; Activa la bomba de agua
+EV_JABON    EQU P2.1     ; Activa la bomba de jabón
+S_CAR       EQU P2.3     ; Sensor de presencia del vehículo en el puente
+FC_RV_CENTRO EQU P2.4    ; Fin de carrera de rodillos verticales en posición central
+LED_LNOR    EQU P2.5     ; LED para lavado normal
+LED_LINT    EQU P2.6     ; LED para lavado intensivo
+
+; Canales PWM
+PWM0        EQU 0xFC     ; PWM0 para velocidad de los rodillos
+PWM1        EQU 0XFD     ; PWM1 para velocidad de los ventiladores de secado
+
+; Puerto A/D
+SPOS_RH     EQU P5.0     ; Sensor analógico para distancia del rodillo horizontal
+SPOS_RV     EQU P5.1     ; Sensor analógico para distancia de rodillos verticales
+;-----------------------------------------------------------------------
+;Directivas ORG para el programa de inicio y las ISR
+;-----------------------------------------------------------------------
+;Programa principal
+ORG 0000H
+INICIO:
+	ACALL INIT	;llamada a inicializaciones
+ 	
+	BUCLE:		;bucle principal
+ 		ACALL MAQ_ESTADOS	;Máquina de estado
+ 		ACALL FSM		;Finite State Machine
+ 		
+		AJMP BUCLE		;Repetir bucle principal
+;-----------------------------------------------------------------------
+;Inicializaciones
+INIT:
+	;INICIALIZACIÓN DE REGISTROS
+	MOV A, #00H		;se inicializa los registros
+	MOV ESTADO, #00H	;se empieza en el ESTADO ESPERA
+	MOV EVENTO, #00H	;se empieza con el EVENTO 0
+
+	;INICIALIZACIÓN DE PUERTOS DE SALIDA
+	CLR SEM_VERDE        ; Apagar semáforo verde
+    	CLR SEM_ROJO         ; Apagar semáforo rojo
+    	CLR AL_START         ; Apagar alarma
+
+    	RET
+
+	
+
+	;INICIALIZACIÓN DE FLAGS
+
+	;INICIALIZACIÓN DE INTERRUPCIONES
+;-----------------------------------------------------------------------
+;MÁQUINA DE ESTADOS
+
+MAQ_ESTADOS: 
+	MOV A, ESTADO	;leer el estado actual
+	RL A 
+	MOV DPTR, #LISTA_EST 
+ 	JMP @A+DPTR 	;saltar al estado correspondiente
+LISTA_EST: 
+ 	AJMP ESTADO_0  ; ESPERA Estado 0  
+	AJMP ESTADO_1  ; ESPERA_FICHA Estado 1 
+	AJMP ESTADO_2  ; ESPERA_BOTÓN Estado 2 
+	AJMP ESTADO_3  ; ENJABONADO Estado 3  
+	AJMP ESTADO_4  ; FROTADO Estado 4 
+	AJMP ESTADO_5  ; FROTADO_TRASERO Estado 5 
+	AJMP ESTADO_6  ; FROTADO_LATERAL Estado 6 
+	AJMP ESTADO_7  ; FROTADO_FRONTAL Estado 7 
+	AJMP ESTADO_8  ; ACLARADO Estado 8 
+	AJMP ESTADO_9  ; SECADO Estado 9  
+
+	 
+ESTADO_0:   
+ 	ACALL MQ_EVEN_0	;Generador de eventos para ESPERA
+	RET 
+ESTADO_1:   
+ 	ACALL MQ_EVEN_1 ;Generador de eventos para ESPERA_FICHA
+ 	RET 
+ESTADO_2:   
+ 	ACALL MQ_EVEN_2 ;Generador de eventos para ESPERA_BOTON
+ 	RET 
+ESTADO_3:   
+ 	ACALL MQ_EVEN_3 ;Generador de eventos para ENJABONADO
+ 	RET 
+ESTADO_4:   
+ 	ACALL MQ_EVEN_4 ;Generador de eventos para FROTADO
+ 	RET 
+ESTADO_5:   
+ 	ACALL MQ_EVEN_5 ;Generador de eventos para FROTADO_TRASERO
+ 	RET 
+ESTADO_6:   
+ 	ACALL MQ_EVEN_6 ;Generador de eventos para FROTADO_LATERAL
+ 	RET 
+ESTADO_7:   
+ 	ACALL MQ_EVEN_7 ;Generador de eventos para FROTADO_FRONTAL
+ 	RET 
+ESTADO_8:   
+ 	ACALL MQ_EVEN_8 ;Generador de eventos para ACLARADO
+ 	RET 
+ESTADO_9:   
+ 	ACALL MQ_EVEN_9 ;Generador de eventos para SECADO
+ 	RET 
+
+
+;----------------------------------- 
+MQ_EVEN_0: 		; Generador de eventos para el estado ESPERA
+	MOV A, EVENTO
+	RL A 
+	MOV DPTR, #LIST_EVEN_MQEV_0 
+	JMP @A+DPTR 
+LIST_EVEN_MQEV_0: 
+ 	AJMP ME0_EV_0  ; Evento 0 
+ 	AJMP ME0_EV_1  ; Evento 1 No hay vehículo en la plataforma
+ 	AJMP ME0_EV_2  ; Evento 2 Detección del coche
+	AJMP ME0_EV_3  ; Evento 3 contador>=5 seg en la plataforma
+; Evento 0: null
+ME0_EV_0: 
+ 	RET 
+; Evento 1: no hay vehículo en la plataforma (S_PLAT=0)
+ME0_EV_1:       	;no hay coche
+	SETB SEM_VERDE	;encender semáforo verde
+	CLR SEM_ROJO
+	CLR cont
+ 	RET
+; Evento 2: detección del vehículo en la plataforma (S_PLAT=1)
+ME0_EV_2:
+ 	CLR SEM_VERDE
+	SETB SEM_ROJO
+	SETB INICIAR_TIMER	;activa el temporizador
+ 	RET 
+ME0_EV_3: 
+	CLR INICIAR_TIMER
+	MOV ESTADO, #01H	;cambiar al estado ESPERA_FICHA
+ 	RET 
+
+;----------------------------------- 
+MQ_EVEN_1: 		; Generador de eventos para el estado ESPERA_FICHA
+	MOV A, EVENTO 
+	RL A 
+ 	MOV DPTR, #LIST_EVEN_MQEV_1
+ 	JMP @A+DPTR 
+LIST_EVEN_MQEV_1: 
+	 AJMP ME1_EV_0  ; Evento 0 
+	 AJMP ME1_EV_1  ; Evento 1 
+	 AJMP ME1_EV_2  ; Evento 2
+	 AJMP ME1_EV_3	; Evento 3
+; Evento 0: null
+ME1_EV_0: 
+	 RET 
+; Evento 1: pasan 30s sin ficha
+ME1_EV_1: 
+	SETB AL_START
+	RET 
+; Evento 2: ficha introducida (S_FICHA=1)
+ME1_EV_2:
+	MOV A, FICHA_TIPO
+	JZ ME1_EV2_NORMAL	;si FICHA_TIPO=0 lavado normal
+	MOV PWM0, #FFH
+	;lavado intensivo
+	SETB LED_LINT		;activar lavado intensivo
+	AJMP ME1_EV2_FIN
+ME1_EV2_NORMAL:
+	SETB LED_LNOR		;activar lavado normal
+	MOV PWM0, #50H
+ME1_EV2_FIN:
+	CLR AL_START
+	MOV ESTADO, #02H	;cambiar al estado ESPERA_BOTÓN
+	RET
+; Evento 3: retira el coche de la plataforma (S_PLAT=0)
+ME1_EV3:
+	CLR AL_START
+	SETB SEM_VERDE
+	CLR SEM_ROJO
+	MOV ESTADO, #00H	;vuelve al estado de ESPERA
+	RET
+
+;----------------------------------- 
+MQ_EVEN_2: 		; Generador de eventos para el estado ESPERA_BOTON
+	MOV A, EVENTO 
+	RL A 
+	MOV DPTR, #LIST_EVEN_MQEV_2	 
+	JMP @A+DPTR 
+LIST_EVEN_MQEV_2: 
+ 	AJMP ME2_EV_0  ; Evento 0 
+ 	AJMP ME2_EV_1  ; Evento 1 
+ 	AJMP ME2_EV_2  ; Evento 2
+	AJMP ME2_EV_3  ; Evento 3
+; Evento 0: null
+ME2_EV_0: 
+ 	RET 
+; Evento 1: pasan 30s sin pulsar el botón
+ME2_EV_1: 
+	SETB AL_START
+ 	RET 
+; Evento 2: pasan 60s sin presionar el botón
+ME2_EV_2: 
+	CLR AL_START
+	MOV ESTADO, #03H	;pasa al estado ENJABONADO
+ 	RET 
+; Evento 3: botób de inicio pulsado (P_START=1)
+ME2_EV_3: 
+	CLR AL_START
+	MOV ESTADO, #03H	;pasa al estado ENJABONADO
+ 	RET 
+
+
+;----------------------------------- 
+MQ_EVEN_3: 	;eventos que generan en el ESTADO ENJABONADO
+	MOV A, EVENTO
+	RL A 
+	MOV DPTR, #LIST_EVEN_MQEV_3
+	JMP @A+DPTR 
+LIST_EVEN_MQEV_3: 
+ 	AJMP ME3_EV_0  ; Evento 0 
+ 	AJMP ME3_EV_1  ; Evento 1 
+ 	AJMP ME3_EV_2  ; Evento 2
+ 	AJMP ME3_EV_3  ; Evento 3 
+; Evento 0; null
+ME3_EV_0: 
+ 	RET 
+; Evento 1: detecta el coche
+ME3_EV_1: 
+	SETB EV_AGUA
+	SETB EV_JABON
+	SETB BMOV_FRONT
+ 	RET 
+; Evento 2: fin detección coche
+ME3_EV_2: 
+	CLR EV_AGUA
+	CLR EV_JABON
+ 	RET 
+ME3_EV_3: 
+	SETB BMOV_FRONT
+	MOV ESTADO, #04H	;pasa a FROTADO
+ 	RET 
+… 
+
+;----------------------------------- 
+MQ_EVEN_4: 		; Generador de eventos para el estado FROTADO
+	MOV A, EVENTO 
+	RL A 
+ 	MOV DPTR, #LIST_EVEN_MQEV_4
+ 	JMP @A+DPTR 
+LIST_EVEN_MQEV_4: 
+	 AJMP ME4_EV_0  ; Evento 0 
+	 AJMP ME4_EV_1  ; Evento 1
+ME4_EV_0: 
+	 RET 
+ME4_EV_1: 
+	SETB RV_INTO
+	MOV A, PWM0
+	MOV ESTADO, #05H	;cambia al estado FROTADO_TRASERA
+	RET 
+… 
+
+;----------------------------------- 
+MQ_EVEN_5: 		; Generador de eventos para el estado FROTADO_TRASERA
+	MOV A, EVENTO 
+	RL A 
+	MOV DPTR, #LIST_EVEN_MQEV_5	 
+	JMP @A+DPTR 
+LIST_EVEN_MQEV_5: 
+ 	AJMP ME5_EV_0  ; Evento 0 
+ 	AJMP ME5_EV_1  ; Evento 1 
+ 	AJMP ME5_EV_2  ; Evento 2
+	AJMP ME5_EV_3  ; Evento 3
+ 
+ME5_EV_0: 
+ 	RET 
+ME5_EV_1: 
+	SETB RV_INTO
+	SET PWM0
+ 	RET 
+
+ME5_EV_2: 
+	CLR RV_INTO
+	SETB RV_OUTTO
+ 	RET 
+ME5_EV_3: 
+	CLR RV_OUTTO
+	CLR PWM0
+	MOV ESTADO, #06H	;cambia a estado FROTADO_LATERAL
+ 	RET 
+… 
+
+
+;----------------------------------- 
+MQ_EVEN_6:		; Generador de eventos para el estado FROTADO_LATERAL
+	MOV A, EVENTO
+	RL A 
+	MOV DPTR, #LIST_EVEN_MQEV_0 
+	JMP @A+DPTR 
+LIST_EVEN_MQEV_6: 
+ 	AJMP ME6_EV_0  ; Evento 0 
+ 	AJMP ME6_EV_1  ; Evento 1 
+ 	AJMP ME6_EV_2  ; Evento 2
+	AJMP ME6_EV_3  ; Evento 3
+ 	AJMP ME6_EV_4  ; Evento 4
+ME6_EV_0: 
+ 	RET 
+ME6_EV_1: 
+	SETB BMOV_BACK
+ 	RET 
+ME6_EV_2: 
+	CLR BMOV_BACK
+	SETB RH_DOWNTO
+	SETB RV_INTO
+ 	RET 
+ME6_EV_3: 
+	MOV A, SPOS_RV
+	
+	
+AJUSTE:
+	SETB RV_OUTTO
+
+ 	RET
+ME6_EV_4: 
+ 	RET 
+
+
+;----------------------------------- 
+MQ_EVEN_7: 		; Generador de eventos para el estado FROTADO_FRONTAL
+	MOV A, EVENTO 
+	RL A 
+ 	MOV DPTR, #LIST_EVEN_MQEV_7
+ 	JMP @A+DPTR 
+LIST_EVEN_MQEV_7: 
+	 AJMP ME7_EV_0  ; Evento 0 
+	 AJMP ME7_EV_1  ; Evento 1  
+	 AJMP ME7_EV_2  ; Evento 2 
+ME7_EV_0:
+	RET 
+ME7_EV_1: 
+	SETB BMOV_BACK
+	RET 
+ME7_EV_2: 
+	SETB RV_INTO
+	RET 
+ME7_EV_3: 
+	CLR RV_INTO
+	CLR PWM0
+	MOV ESTADO, #08H        ;cambiar al estado ACLARADO
+	RET 
+;----------------------------------- 
+MQ_EVEN_8: 		; Generador de eventos para el estado ACLARADO
+	MOV A, EVENTO 
+	RL A 
+	MOV DPTR, #LIST_EVEN_MQEV_8	 
+	JMP @A+DPTR 
+LIST_EVEN_MQEV_8: 
+ 	AJMP ME8_EV_0  ; Evento 0 
+ 	AJMP ME8_EV_1  ; Descripción Maq. Event. 0. Evento 1 
+	…    … 
+ 	AJMP ME8_EV_k  ; Descripción Maq. Event. 0. Evento k 
+ME8_EV_0: 
+ 	RET 
+ME8_EV_1: 
+	[ACCIÓN_i] 
+	[ACCIÓN_ii] 
+	… 
+ 	RET 
+… 
+
+;----------------------------------- 
+MQ_EVEN_9: 		; Generador de eventos para el estado SECADO
+	MOV A, EVENTO
+	RL A 
+	MOV DPTR, #LIST_EVEN_MQEV_9
+	JMP @A+DPTR 
+LIST_EVEN_MQEV_9: 
+ 	AJMP ME9_EV_0  ; Evento 0 
+ 	AJMP ME9_EV_1  ; Evento 1 
+ 	AJMP ME9_EV_2  ; Evento 2
+	AJMP ME9_EV_3  ; Evento 3
+ 	AJMP ME9_EV_4  ; Evento 4 
+ 	AJMP ME9_EV_5  ; Evento 5
+	AJMP ME9_EV_6  ; Evento 6
+ME9_EV_0: 
+ 	RET 
+ME9_EV_1: 
+	
+ 	RET 
+
+
+END
