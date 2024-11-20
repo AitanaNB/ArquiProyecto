@@ -1,0 +1,56 @@
+
+### Flujo de trabajo básico para manejar cambios en un proyecto con Git
+
+1. **Verificar el estado del repositorio:**
+   ```bash
+   git status
+   ```
+
+2. **Agregar los cambios al área de preparación:**
+   - Para un archivo específico:
+     ```bash
+     git add nombre_del_archivo
+     ```
+   - Para todos los archivos:
+     ```bash
+     git add .
+     ```
+
+3. **Hacer un commit:**
+   ```bash
+   git commit -m "Descripción de los cambios"
+   ```
+
+4. **Subir los cambios al remoto:**
+   ```bash
+   git push origin main
+   ```
+
+5. **Actualizar el repositorio local (si trabajas en equipo):**
+   ```bash
+   git pull origin main
+   ```
+
+6. **Resolver conflictos (si los hay):**
+   - Edita los archivos con conflictos.
+   - Marca los conflictos resueltos:
+     ```bash
+     git add archivo_con_conflicto
+     ```
+   - Haz un commit:
+     ```bash
+     git commit -m "Resolver conflictos"
+     ```
+   - Sube los cambios:
+     ```bash
+     git push origin main
+     ```
+
+### Resumen rápido del flujo:
+1. `git status`
+2. `git add .`
+3. `git commit -m "Mensaje"`
+4. `git push origin main`
+5. `git pull origin main` (si trabajas en equipo)
+
+¡Listo!
