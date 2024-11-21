@@ -7,30 +7,30 @@ EVENTO    EQU 31H       ; Variable para el evento actual (en RAM interna)
 
 ; Definiciones de puertos
 ; Puerto 0
-SEM_VERDE   EQU P0.0     ; Semáforo verde 0x80.0
-SEM_ROJO    EQU P0.1     ; Semáforo rojo 0x80.1
+SEM_VERDE   EQU P0.0     ; SemÃ¡foro verde 0x80.0
+SEM_ROJO    EQU P0.1     ; SemÃ¡foro rojo 0x80.1
 S_PLAT      EQU P0.2     ; Sensor de coche en plataforma
 FICHA_TIPO  EQU P0.3     ; Tipo de ficha (1: intensivo, 0: normal)
 S_FICHA     EQU P0.4     ; Sensor de ficha introducida
-P_START     EQU P0.5     ; Botón de inicio
+P_START     EQU P0.5     ; BotÃ³n de inicio
 AL_START    EQU P0.6     ; Alarma activa
-BPOS_START  EQU P0.7     ; Fin de carrera del puente en posición inicial
+BPOS_START  EQU P0.7     ; Fin de carrera del puente en posiciÃ³n inicial
 
 ; Puerto 1
 BMOV_FRONT  EQU P1.0     ; Movimiento del puente hacia adelante
-BMOV_BACK   EQU P1.1     ; Movimiento del puente hacia atrás
+BMOV_BACK   EQU P1.1     ; Movimiento del puente hacia atrÃ¡s
 FC_RH_TOP   EQU P1.2     ; Fin de carrera del rodillo horizontal en parte alta
 RH_UPTO     EQU P1.3     ; Mueve el rodillo horizontal hacia arriba
 RH_DOWNTO   EQU P1.4     ; Mueve el rodillo horizontal hacia abajo
-FC_RV_BORDE EQU P1.5     ; Fin de carrera de rodillos verticales en posición externa
+FC_RV_BORDE EQU P1.5     ; Fin de carrera de rodillos verticales en posiciÃ³n externa
 RV_OUTTO    EQU P1.6     ; Mueve los rodillos verticales hacia afuera
 RV_INTO     EQU P1.7     ; Mueve los rodillos verticales hacia adentro
 
 ; Puerto 2
 EV_AGUA     EQU P2.0     ; Activa la bomba de agua
-EV_JABON    EQU P2.1     ; Activa la bomba de jabón
-S_CAR       EQU P2.3     ; Sensor de presencia del vehículo en el puente
-FC_RV_CENTRO EQU P2.4    ; Fin de carrera de rodillos verticales en posición central
+EV_JABON    EQU P2.1     ; Activa la bomba de jabÃ³n
+S_CAR       EQU P2.3     ; Sensor de presencia del vehÃ­culo en el puente
+FC_RV_CENTRO EQU P2.4    ; Fin de carrera de rodillos verticales en posiciÃ³n central
 LED_LNOR    EQU P2.5     ; LED para lavado normal
 LED_LINT    EQU P2.6     ; LED para lavado intensivo
 
@@ -39,8 +39,8 @@ PWM0        EQU 0xFC     ; PWM0 para velocidad de los rodillos
 PWM1        EQU 0XFD     ; PWM1 para velocidad de los ventiladores de secado
 
 ; Puerto A/D
-SPOS_RH     EQU P5.0     ; Sensor analógico para distancia del rodillo horizontal
-SPOS_RV     EQU P5.1     ; Sensor analógico para distancia de rodillos verticales
+SPOS_RH     EQU P5.0     ; Sensor analÃ³gico para distancia del rodillo horizontal
+SPOS_RV     EQU P5.1     ; Sensor analÃ³gico para distancia de rodillos verticales
 ;-----------------------------------------------------------------------
 ;Directivas ORG para el programa de inicio y las ISR
 ;-----------------------------------------------------------------------
@@ -50,32 +50,33 @@ INICIO:
 	ACALL INIT	;llamada a inicializaciones
  	
 	BUCLE:		;bucle principal
- 		ACALL MAQ_ESTADOS	;Máquina de estado
+ 		ACALL MAQ_ESTADOS	;MÃ¡quina de estado
  		ACALL FSM		;Finite State Machine
  		
 		AJMP BUCLE		;Repetir bucle principal
+ORG 0x7B ; donde va el programa principal
 ;-----------------------------------------------------------------------
 ;Inicializaciones
 INIT:
-	;INICIALIZACIÓN DE REGISTROS
+	;INICIALIZACIÃ“N DE REGISTROS
 	MOV A, #00H		;se inicializa los registros
 	MOV ESTADO, #00H	;se empieza en el ESTADO ESPERA
 	MOV EVENTO, #00H	;se empieza con el EVENTO 0
 
-	;INICIALIZACIÓN DE PUERTOS DE SALIDA
-	CLR SEM_VERDE        ; Apagar semáforo verde
-    	CLR SEM_ROJO         ; Apagar semáforo rojo
+	;INICIALIZACIÃ“N DE PUERTOS DE SALIDA
+	SETB SEM_VERDE        ; Apagar semÃ¡foro verde
+    	CLR SEM_ROJO         ; Apagar semÃ¡foro rojo
     	CLR AL_START         ; Apagar alarma
 
     	RET
 
 	
 
-	;INICIALIZACIÓN DE FLAGS
+	;INICIALIZACIÃ“N DE FLAGS
 
-	;INICIALIZACIÓN DE INTERRUPCIONES
+	;INICIALIZACIÃ“N DE INTERRUPCIONES
 ;-----------------------------------------------------------------------
-;MÁQUINA DE ESTADOS
+;MÃQUINA DE ESTADOS
 
 MAQ_ESTADOS: 
 	MOV A, ESTADO	;leer el estado actual
@@ -85,7 +86,7 @@ MAQ_ESTADOS:
 LISTA_EST: 
  	AJMP ESTADO_0  ; ESPERA Estado 0  
 	AJMP ESTADO_1  ; ESPERA_FICHA Estado 1 
-	AJMP ESTADO_2  ; ESPERA_BOTÓN Estado 2 
+	AJMP ESTADO_2  ; ESPERA_BOTÃ“N Estado 2 
 	AJMP ESTADO_3  ; ENJABONADO Estado 3  
 	AJMP ESTADO_4  ; FROTADO Estado 4 
 	AJMP ESTADO_5  ; FROTADO_TRASERO Estado 5 
@@ -96,7 +97,30 @@ LISTA_EST:
 
 	 
 ESTADO_0:   
- 	ACALL MQ_EVEN_0	;Generador de eventos para ESPERA
+ 	ACALL E0_GEN_EV; Generador de eventos para ESPERA
+	MOV A, EVENTO
+	RL, A
+	MOV DPTR, #E0_EV_TAB
+	JMP @A+DPTR
+;TABLA DE EVENTOS
+	ES0_EV_TAB:
+	AJMP E0_EV0
+	AJMP E0_EV1
+	E0_EV0: ;EVENTO VACIO
+	RET
+	E0_EV1: ;EVENTO COCHE DETECTADP
+	MOV ESTADO, #1
+	SETB EV2 ;ABRIMOS LA VALVULA DE ABAJO
+	MOV EVENTO, #0
+	RET
+
+	E0_GEN_EV: ;GENERADOR DE EVENTOS
+	MOV A, S_PLAT
+	;ANL A, #00000100b      ;Salto condicionado AND
+	JNZ S_PLAT_ACTIVADO 	;JNZ ES0_NB_ACTIVADO
+	RET
+	S_PLAT_ACTIVADO: ;CONDICION
+	MOV EVENTO, #2
 	RET 
 ESTADO_1:   
  	ACALL MQ_EVEN_1 ;Generador de eventos para ESPERA_FICHA
@@ -135,19 +159,19 @@ MQ_EVEN_0: 		; Generador de eventos para el estado ESPERA
 	JMP @A+DPTR 
 LIST_EVEN_MQEV_0: 
  	AJMP ME0_EV_0  ; Evento 0 
- 	AJMP ME0_EV_1  ; Evento 1 No hay vehículo en la plataforma
- 	AJMP ME0_EV_2  ; Evento 2 Detección del coche
+ 	AJMP ME0_EV_1  ; Evento 1 No hay vehÃ­culo en la plataforma
+ 	AJMP ME0_EV_2  ; Evento 2 DetecciÃ³n del coche
 	AJMP ME0_EV_3  ; Evento 3 contador>=5 seg en la plataforma
 ; Evento 0: null
 ME0_EV_0: 
  	RET 
-; Evento 1: no hay vehículo en la plataforma (S_PLAT=0)
+; Evento 1: no hay vehÃ­culo en la plataforma (S_PLAT=0)
 ME0_EV_1:       	;no hay coche
-	SETB SEM_VERDE	;encender semáforo verde
+	SETB SEM_VERDE	;encender semÃ¡foro verde
 	CLR SEM_ROJO
 	CLR cont
  	RET
-; Evento 2: detección del vehículo en la plataforma (S_PLAT=1)
+; Evento 2: detecciÃ³n del vehÃ­culo en la plataforma (S_PLAT=1)
 ME0_EV_2:
  	CLR SEM_VERDE
 	SETB SEM_ROJO
@@ -189,7 +213,7 @@ ME1_EV2_NORMAL:
 	MOV PWM0, #50H
 ME1_EV2_FIN:
 	CLR AL_START
-	MOV ESTADO, #02H	;cambiar al estado ESPERA_BOTÓN
+	MOV ESTADO, #02H	;cambiar al estado ESPERA_BOTÃ“N
 	RET
 ; Evento 3: retira el coche de la plataforma (S_PLAT=0)
 ME1_EV3:
@@ -213,16 +237,16 @@ LIST_EVEN_MQEV_2:
 ; Evento 0: null
 ME2_EV_0: 
  	RET 
-; Evento 1: pasan 30s sin pulsar el botón
+; Evento 1: pasan 30s sin pulsar el botÃ³n
 ME2_EV_1: 
 	SETB AL_START
  	RET 
-; Evento 2: pasan 60s sin presionar el botón
+; Evento 2: pasan 60s sin presionar el botÃ³n
 ME2_EV_2: 
 	CLR AL_START
 	MOV ESTADO, #03H	;pasa al estado ENJABONADO
  	RET 
-; Evento 3: botób de inicio pulsado (P_START=1)
+; Evento 3: botÃ³b de inicio pulsado (P_START=1)
 ME2_EV_3: 
 	CLR AL_START
 	MOV ESTADO, #03H	;pasa al estado ENJABONADO
@@ -249,7 +273,7 @@ ME3_EV_1:
 	SETB EV_JABON
 	SETB BMOV_FRONT
  	RET 
-; Evento 2: fin detección coche
+; Evento 2: fin detecciÃ³n coche
 ME3_EV_2: 
 	CLR EV_AGUA
 	CLR EV_JABON
@@ -258,7 +282,7 @@ ME3_EV_3:
 	SETB BMOV_FRONT
 	MOV ESTADO, #04H	;pasa a FROTADO
  	RET 
-… 
+â€¦ 
 
 ;----------------------------------- 
 MQ_EVEN_4: 		; Generador de eventos para el estado FROTADO
@@ -276,7 +300,7 @@ ME4_EV_1:
 	MOV A, PWM0
 	MOV ESTADO, #05H	;cambia al estado FROTADO_TRASERA
 	RET 
-… 
+â€¦ 
 
 ;----------------------------------- 
 MQ_EVEN_5: 		; Generador de eventos para el estado FROTADO_TRASERA
@@ -306,7 +330,7 @@ ME5_EV_3:
 	CLR PWM0
 	MOV ESTADO, #06H	;cambia a estado FROTADO_LATERAL
  	RET 
-… 
+â€¦ 
 
 
 ;----------------------------------- 
@@ -374,17 +398,17 @@ MQ_EVEN_8: 		; Generador de eventos para el estado ACLARADO
 	JMP @A+DPTR 
 LIST_EVEN_MQEV_8: 
  	AJMP ME8_EV_0  ; Evento 0 
- 	AJMP ME8_EV_1  ; Descripción Maq. Event. 0. Evento 1 
-	…    … 
- 	AJMP ME8_EV_k  ; Descripción Maq. Event. 0. Evento k 
+ 	AJMP ME8_EV_1  ; DescripciÃ³n Maq. Event. 0. Evento 1 
+	â€¦    â€¦ 
+ 	AJMP ME8_EV_k  ; DescripciÃ³n Maq. Event. 0. Evento k 
 ME8_EV_0: 
  	RET 
 ME8_EV_1: 
-	[ACCIÓN_i] 
-	[ACCIÓN_ii] 
-	… 
+	[ACCIÃ“N_i] 
+	[ACCIÃ“N_ii] 
+	â€¦ 
  	RET 
-… 
+â€¦ 
 
 ;----------------------------------- 
 MQ_EVEN_9: 		; Generador de eventos para el estado SECADO
