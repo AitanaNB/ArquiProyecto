@@ -1,0 +1,150 @@
+; PROYECTO
+;-----------------------------------------------------------------------
+;Se defienen las EQUs
+ESTADO    EQU 30H       ; Variable para el estado actual (en RAM interna)
+EVENTO    EQU 31H       ; Variable para el evento actual (en RAM interna)
+
+; Definiciones de puertos
+; Puerto 0
+SEM_VERDE   EQU P0.0     ; Semáforo verde 0x80.0
+SEM_ROJO    EQU P0.1     ; Semáforo rojo 0x80.1
+S_PLAT      EQU P0.2     ; Sensor de coche en plataforma
+FICHA_TIPO  EQU P0.3     ; Tipo de ficha (1: intensivo, 0: normal)
+S_FICHA     EQU P0.4     ; Sensor de ficha introducida
+P_START     EQU P0.5     ; Botón de inicio
+AL_START    EQU P0.6     ; Alarma activa
+BPOS_START  EQU P0.7     ; Fin de carrera del puente en posición inicial
+; Puerto 1
+BMOV_FRONT  EQU P1.0     ; Movimiento del puente hacia adelante
+BMOV_BACK   EQU P1.1     ; Movimiento del puente hacia atrás
+FC_RH_TOP   EQU P1.2     ; Fin de carrera del rodillo horizontal en parte alta
+RH_UPTO     EQU P1.3     ; Mueve el rodillo horizontal hacia arriba
+RH_DOWNTO   EQU P1.4     ; Mueve el rodillo horizontal hacia abajo
+FC_RV_BORDE EQU P1.5     ; Fin de carrera de rodillos verticales en posición externa
+RV_OUTTO    EQU P1.6     ; Mueve los rodillos verticales hacia afuera
+RV_INTO     EQU P1.7     ; Mueve los rodillos verticales hacia adentro
+; Puerto 2
+EV_AGUA     EQU P2.0     ; Activa la bomba de agua
+EV_JABON    EQU P2.1     ; Activa la bomba de jabón
+S_CAR       EQU P2.3     ; Sensor de presencia del vehículo en el puente
+FC_RV_CENTRO EQU P2.4    ; Fin de carrera de rodillos verticales en posición central
+LED_LNOR    EQU P2.5     ; LED para lavado normal
+LED_LINT    EQU P2.6     ; LED para lavado intensivo
+; Canales PWM
+PWM0        EQU 0xFC     ; PWM0 para velocidad de los rodillos
+PWM1        EQU 0xFD     ; PWM1 para velocidad de los ventiladores de secado
+; Puerto A/D
+ADC EQU 0xC4 ;P5, no es bit adressable
+;SPOS_RH     EQU P5.0     ; Sensor analógico para distancia del rodillo horizontal
+;SPOS_RV     EQU P5.1     ; Sensor analógico para distancia de rodillos verticales
+;-----------------------------------------------------------------------
+;Directivas ORG para el programa de inicio y las ISR
+
+ORG 0x00
+AJMP INICIO
+
+;-----------------------------------------------------------------------
+;Programa principal
+ORG 0x7B
+INICIO:
+	ACALL INIT			;llamada a inicializaciones
+	BUCLE:				;bucle principal
+ 		;ACALL GENERADOR_EVENTOS
+ 		ACALL FSM		;Finite State Machine, máquina de estados
+		AJMP BUCLE		;Repetir bucle principal
+;-----------------------------------------------------------------------
+INIT:
+	;INICIALIZACIÓN DE REGISTROS
+	MOV A, #00H		;se inicializa los registros
+	MOV ESTADO, #00H	;se empieza en el ESTADO ESPERA
+	MOV EVENTO, #00H	;se empieza con el EVENTO 0
+
+	;INICIALIZACIÓN DE PUERTOS DE SALIDA
+	CLR SEM_VERDE        ; Apagar semáforo verde
+    	CLR SEM_ROJO         ; Apagar semáforo rojo
+    	CLR AL_START         ; Apagar alarma
+    	RET
+	;INICIALIZACIÓN DE FLAGS
+	;INICIALIZACIÓN DE INTERRUPCIONES
+;-----------------------------------------------------------------------
+;FSM
+FSM: 
+	MOV A, ESTADO	;leer el estado actual
+	RL A 
+	MOV DPTR, #LISTA_EST 
+ 	JMP @A+DPTR 	;saltar al estado correspondiente
+LISTA_EST: 
+	AJMP ESTADO_0  ; ESPERA Estado 0  
+	AJMP ESTADO_1  ; ESPERA_FICHA Estado 1 
+;===================ESTADO0=======================;	 
+ESTADO_0:   
+ 	ACALL ES0_GEN_EV	;Generador de eventos para ESPERA semáforo verde
+	MOV A, EVENTO
+	RL A
+	MOV DPTR, #ES0_EV_TAB
+	JMP @A+DPTR
+	ES0_EV_TAB:		;TABLA DE EVENTOS
+	AJMP ES0_EV0
+	AJMP ES0_EV1
+	ES0_EV0:		;evento vacío
+	RET
+	ES0_EV1:
+	;activar contador
+	RET
+	ES0_GEN_EV: 		;generador de eventos
+	MOV A, P0
+	ANL A, #00000100b 
+	JB P0.2, COCHE_DETECTADO ;si se detecta coche vamos a evento 1
+	;SI CONT 5 ESTADO 2, EVENTO 0
+	RET
+	COCHE_DETECTADO:
+	MOV EVENTO, #1
+	RET
+;===================ESTADO1=======================;
+ESTADO_1:   
+ 	ACALL ES1_GEN_EV	;Generador de eventos para ESPERA FICHA
+	MOV A, EVENTO
+	RL A
+	MOV DPTR, #ES0_EV_TAB	 ; Tabla de eventos del estado 1
+	JMP @A+DPTR
+
+	ES1_EV_TAB:		;TABLA DE EVENTOS
+	AJMP ES1_EV0           ; Evento vacío
+	AJMP ES1_EV1           ; Evento 1: ficha detectada
+	AJMP ES1_EV2           ; Evento 2: contador alcanza 30
+	AJMP ES1_EV3           ; Evento 3: volver al estado inicial
+
+	ES1_EV0:		;evento vacío
+	RET
+
+	ES1_EV1:		;contador = 30 y ficha = 0
+	SETB AL_START	
+	RET
+
+	ES1_EV2:		;ficha detectada
+	MOV ESTADO, #02H	;Cambiar al estado 2
+	MOV A, P0
+	JNB FICHA_TIPO, LAVADO_NORMAL	;si FICHA_TIPO=0 lavado normal
+	MOV PWM0, 00H
+	SETB LED_LINT		;activar lavado intensivo
+	RET
+
+	LAVADO_NORMAL:
+	SETB LED_LNOR		;activar lavado normal
+	MOV PWM0, #50H
+	RET
+
+	ES1_EV3:		;plataforma vacía, volver a estado 0
+	MOV ESTADO, #00H	
+	RET
+	
+	ES1_GEN_EV: 		;generador de eventos
+	
+	MOV EVENTO, #01H
+	RET
+
+
+;===================ESTADO2=======================;
+
+;----------------------------------- 
+END

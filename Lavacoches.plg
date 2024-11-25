@@ -1,0 +1,150 @@
+Build target 'Target 1'
+assembling Lavacoches.a...
+.\Lavacoches.a(42): error A17: INVALID BYTE BASE IN BIT ADDRESS EXPRESSION
+.\Lavacoches.a(43): error A17: INVALID BYTE BASE IN BIT ADDRESS EXPRESSION
+.\Lavacoches.a(54): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(148): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(154): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(157): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(171): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(181): error A48: DATA-ADDRESS EXPECTED
+.\Lavacoches.a(183): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(261): error A9: SYNTAX ERROR
+.\Lavacoches.a(279): error A9: SYNTAX ERROR
+.\Lavacoches.a(297): error A9: SYNTAX ERROR
+.\Lavacoches.a(309): error A9: SYNTAX ERROR
+.\Lavacoches.a(335): error A48: DATA-ADDRESS EXPECTED
+.\Lavacoches.a(378): error A9: SYNTAX ERROR
+.\Lavacoches.a(378): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(379): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(383): error A9: SYNTAX ERROR
+.\Lavacoches.a(383): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(383): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(384): error A9: SYNTAX ERROR
+.\Lavacoches.a(384): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(384): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(385): error A9: SYNTAX ERROR
+.\Lavacoches.a(387): error A9: SYNTAX ERROR
+.\Lavacoches.a(398): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(399): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(400): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(401): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(402): error A45: UNDEFINED SYMBOL (PASS-2)
+Target not created
+Build target 'Target 1'
+assembling Lavacoches.a...
+.\Lavacoches.a(42): error A17: INVALID BYTE BASE IN BIT ADDRESS EXPRESSION
+.\Lavacoches.a(43): error A17: INVALID BYTE BASE IN BIT ADDRESS EXPRESSION
+.\Lavacoches.a(134): error A8: ATTEMPT TO DEFINE AN ALREADY DEFINED LABEL
+.\Lavacoches.a(161): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(187): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(188): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(189): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(237): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(243): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(246): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(260): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(270): error A48: DATA-ADDRESS EXPECTED
+.\Lavacoches.a(272): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(350): error A9: SYNTAX ERROR
+.\Lavacoches.a(368): error A9: SYNTAX ERROR
+.\Lavacoches.a(386): error A9: SYNTAX ERROR
+.\Lavacoches.a(398): error A9: SYNTAX ERROR
+.\Lavacoches.a(424): error A48: DATA-ADDRESS EXPECTED
+.\Lavacoches.a(467): error A9: SYNTAX ERROR
+.\Lavacoches.a(467): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(468): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(472): error A9: SYNTAX ERROR
+.\Lavacoches.a(472): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(472): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(473): error A9: SYNTAX ERROR
+.\Lavacoches.a(473): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(473): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(474): error A9: SYNTAX ERROR
+.\Lavacoches.a(476): error A9: SYNTAX ERROR
+.\Lavacoches.a(487): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(488): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(489): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(490): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(491): error A45: UNDEFINED SYMBOL (PASS-2)
+Target not created
+Build target 'Target 1'
+assembling Lavacoches.a...
+.\Lavacoches.a(42): error A17: INVALID BYTE BASE IN BIT ADDRESS EXPRESSION
+.\Lavacoches.a(43): error A17: INVALID BYTE BASE IN BIT ADDRESS EXPRESSION
+.\Lavacoches.a(134): error A8: ATTEMPT TO DEFINE AN ALREADY DEFINED LABEL
+.\Lavacoches.a(161): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(187): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(188): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(189): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(237): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(243): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(246): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(260): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(270): error A48: DATA-ADDRESS EXPECTED
+.\Lavacoches.a(272): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(350): error A9: SYNTAX ERROR
+.\Lavacoches.a(368): error A9: SYNTAX ERROR
+.\Lavacoches.a(386): error A9: SYNTAX ERROR
+.\Lavacoches.a(398): error A9: SYNTAX ERROR
+.\Lavacoches.a(424): error A48: DATA-ADDRESS EXPECTED
+.\Lavacoches.a(467): error A9: SYNTAX ERROR
+.\Lavacoches.a(467): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(468): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(472): error A9: SYNTAX ERROR
+.\Lavacoches.a(472): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(472): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(473): error A9: SYNTAX ERROR
+.\Lavacoches.a(473): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(473): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(474): error A9: SYNTAX ERROR
+.\Lavacoches.a(476): error A9: SYNTAX ERROR
+.\Lavacoches.a(487): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(488): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(489): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(490): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(491): error A45: UNDEFINED SYMBOL (PASS-2)
+Target not created
+Build target 'Target 1'
+assembling Lavacoches.a...
+.\Lavacoches.a(42): error A17: INVALID BYTE BASE IN BIT ADDRESS EXPRESSION
+.\Lavacoches.a(43): error A17: INVALID BYTE BASE IN BIT ADDRESS EXPRESSION
+.\Lavacoches.a(134): error A8: ATTEMPT TO DEFINE AN ALREADY DEFINED LABEL
+.\Lavacoches.a(161): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(187): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(188): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(189): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(237): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(243): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(246): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(260): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(270): error A48: DATA-ADDRESS EXPECTED
+.\Lavacoches.a(272): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(350): error A9: SYNTAX ERROR
+.\Lavacoches.a(368): error A9: SYNTAX ERROR
+.\Lavacoches.a(386): error A9: SYNTAX ERROR
+.\Lavacoches.a(398): error A9: SYNTAX ERROR
+.\Lavacoches.a(424): error A48: DATA-ADDRESS EXPECTED
+.\Lavacoches.a(467): error A9: SYNTAX ERROR
+.\Lavacoches.a(467): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(468): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(472): error A9: SYNTAX ERROR
+.\Lavacoches.a(472): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(472): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(473): error A9: SYNTAX ERROR
+.\Lavacoches.a(473): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(473): error A3: ILLEGAL CHARACTER
+.\Lavacoches.a(474): error A9: SYNTAX ERROR
+.\Lavacoches.a(476): error A9: SYNTAX ERROR
+.\Lavacoches.a(487): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(488): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(489): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(490): error A45: UNDEFINED SYMBOL (PASS-2)
+.\Lavacoches.a(491): error A45: UNDEFINED SYMBOL (PASS-2)
+Target not created
+Build target 'Target 1'
+Target has no object modules
+Target not created
+Build target 'Target 1'
+Target has no object modules
+Target not created

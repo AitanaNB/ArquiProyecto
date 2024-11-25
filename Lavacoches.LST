@@ -1,0 +1,745 @@
+A51 MACRO ASSEMBLER  LAVACOCHES                                                           11/24/2024 16:09:47 PAGE     1
+
+
+MACRO ASSEMBLER A51 V6.14
+NO OBJECT MODULE REQUESTED
+ASSEMBLER INVOKED BY: C:\Keil\C51\BIN\A51.EXE .\Lavacoches.a SET(SMALL) DEBUG EP
+
+LOC  OBJ            LINE     SOURCE
+
+                       1     ; PROYECTO
+                       2     ;-----------------------------------------------------------------------
+                       3     ;Se defienen las EQUs
+                       4     
+  0030                 5     ESTADO    EQU 30H       ; Variable para el estado actual (en RAM interna)
+  0031                 6     EVENTO    EQU 31H       ; Variable para el evento actual (en RAM interna)
+                       7     
+                       8     ; Definiciones de puertos
+                       9     ; Puerto 0
+  0080                10     SEM_VERDE   EQU P0.0     ; Semáforo verde 0x80.0
+  0081                11     SEM_ROJO    EQU P0.1     ; Semáforo rojo 0x80.1
+  0082                12     S_PLAT      EQU P0.2     ; Sensor de coche en plataforma
+  0083                13     FICHA_TIPO  EQU P0.3     ; Tipo de ficha (1: intensivo, 0: normal)
+  0084                14     S_FICHA     EQU P0.4     ; Sensor de ficha introducida
+  0085                15     P_START     EQU P0.5     ; Botón de inicio
+  0086                16     AL_START    EQU P0.6     ; Alarma activa
+  0087                17     BPOS_START  EQU P0.7     ; Fin de carrera del puente en posición inicial
+                      18     
+                      19     ; Puerto 1
+  0090                20     BMOV_FRONT  EQU P1.0     ; Movimiento del puente hacia adelante
+  0091                21     BMOV_BACK   EQU P1.1     ; Movimiento del puente hacia atrás
+  0092                22     FC_RH_TOP   EQU P1.2     ; Fin de carrera del rodillo horizontal en parte alta
+  0093                23     RH_UPTO     EQU P1.3     ; Mueve el rodillo horizontal hacia arriba
+  0094                24     RH_DOWNTO   EQU P1.4     ; Mueve el rodillo horizontal hacia abajo
+  0095                25     FC_RV_BORDE EQU P1.5     ; Fin de carrera de rodillos verticales en posición externa
+  0096                26     RV_OUTTO    EQU P1.6     ; Mueve los rodillos verticales hacia afuera
+  0097                27     RV_INTO     EQU P1.7     ; Mueve los rodillos verticales hacia adentro
+                      28     
+                      29     ; Puerto 2
+  00A0                30     EV_AGUA     EQU P2.0     ; Activa la bomba de agua
+  00A1                31     EV_JABON    EQU P2.1     ; Activa la bomba de jabón
+  00A3                32     S_CAR       EQU P2.3     ; Sensor de presencia del vehículo en el puente
+  00A4                33     FC_RV_CENTRO EQU P2.4    ; Fin de carrera de rodillos verticales en posición central
+  00A5                34     LED_LNOR    EQU P2.5     ; LED para lavado normal
+  00A6                35     LED_LINT    EQU P2.6     ; LED para lavado intensivo
+                      36     
+                      37     ; Canales PWM
+  00FC                38     PWM0        EQU 0xFC     ; PWM0 para velocidad de los rodillos
+  00FD                39     PWM1        EQU 0XFD     ; PWM1 para velocidad de los ventiladores de secado
+                      40     
+                      41     ; Puerto A/D
+                      42     SPOS_RH     EQU P5.0     ; Sensor analógico para distancia del rodillo horizontal
+*** _________________________________________^
+*** ERROR #A17 IN 42 (.\Lavacoches.a, LINE 42): INVALID BYTE BASE IN BIT ADDRESS EXPRESSION
+                      43     SPOS_RV     EQU P5.1     ; Sensor analógico para distancia de rodillos verticales
+*** _________________________________________^
+*** ERROR #A17 IN 43 (.\Lavacoches.a, LINE 43): INVALID BYTE BASE IN BIT ADDRESS EXPRESSION
+                      44     ;-----------------------------------------------------------------------
+                      45     ;Directivas ORG para el programa de inicio y las ISR
+0000                  46     ORG 0000H
+                      47     
+0000 017B             48     AJMP INICIO
+                      49     
+007B                  50     ORG 0x7B
+                      51     ;-----------------------------------------------------------------------
+                      52     ;Programa principal
+                      53     
+007B                  54     INICIO:
+A51 MACRO ASSEMBLER  LAVACOCHES                                                           11/24/2024 16:09:47 PAGE     2
+
+007B 1181             55             ACALL INIT                      ;llamada a inicializaciones
+                      56             
+007D                  57             BUCLE:                          ;bucle principal
+                      58                     ;ACALL GENERADOR_EVENTOS
+007D 1190             59                     ACALL FSM               ;Finite State Machine, máquina de estados
+                      60                     
+007F 017D             61                     AJMP BUCLE              ;Repetir bucle principal
+                      62     ;-----------------------------------------------------------------------
+                      63     ;Inicializaciones
+0081                  64     INIT:
+                      65             ;INICIALIZACIÓN DE REGISTROS
+0081 7400             66             MOV A, #00H             ;se inicializa los registros
+0083 753000           67             MOV ESTADO, #00H        ;se empieza en el ESTADO ESPERA
+0086 753100           68             MOV EVENTO, #00H        ;se empieza con el EVENTO 0
+                      69     
+                      70             ;INICIALIZACIÓN DE PUERTOS DE SALIDA
+0089 C280             71             CLR SEM_VERDE        ; Apagar semáforo verde
+008B C281             72             CLR SEM_ROJO         ; Apagar semáforo rojo
+008D C286             73             CLR AL_START         ; Apagar alarma
+                      74     
+008F 22               75             RET
+                      76     
+                      77             ;INICIALIZACIÓN DE FLAGS
+                      78     
+                      79             ;INICIALIZACIÓN DE INTERRUPCIONES
+                      80     ;-----------------------------------------------------------------------
+                      81     ;FSM
+0090                  82     FSM: 
+0090 E530             83             MOV A, ESTADO   ;leer el estado actual
+0092 23               84             RL A 
+0093 900097           85             MOV DPTR, #LISTA_EST 
+0096 73               86             JMP @A+DPTR     ;saltar al estado correspondiente
+0097                  87     LISTA_EST: 
+0097 01A9             88             AJMP ESTADO_0  ; ESPERA Estado 0  
+0099 01C1             89             AJMP ESTADO_1  ; ESPERA_FICHA Estado 1 
+009B 01FE             90             AJMP ESTADO_2  ; ESPERA_BOTÓN Estado 2 
+009D 210E             91             AJMP ESTADO_3  ; ENJABONADO Estado 3  
+009F 2111             92             AJMP ESTADO_4  ; FROTADO_TRASERO Estado 4 
+00A1 2114             93             AJMP ESTADO_5  ; FROTADO_LATERAL Estado 5 
+00A3 2117             94             AJMP ESTADO_6  ; FROTADO_FRONTAL Estado 6 
+00A5 211A             95             AJMP ESTADO_7  ; ACLARADO Estado 7 
+00A7 211D             96             AJMP ESTADO_8  ; SECADO Estado 8
+                      97     
+                      98     ;===================ESTADO0=======================;      
+00A9                  99     ESTADO_0:   
+00A9 11B8            100             ACALL ES0_GEN_EV        ;Generador de eventos para ESPERA semáforo verde
+00AB E531            101             MOV A, EVENTO
+00AD 23              102             RL A
+00AE 9000B2          103             MOV DPTR, #ES0_EV_TAB
+00B1 73              104             JMP @A+DPTR
+                     105     
+00B2                 106             ES0_EV_TAB:             ;TABLA DE EVENTOS
+00B2 01B6            107             AJMP ES0_EV0
+00B4 01B7            108             AJMP ES0_EV1
+                     109     
+00B6                 110             ES0_EV0:                ;evento vacío
+00B6 22              111             RET
+                     112     
+00B7                 113             ES0_EV1:
+                     114             ;activar contador
+00B7 22              115             RET
+                     116             
+00B8                 117             ES0_GEN_EV:             ;generador de eventos
+00B8 A282            118             MOV C, S_PLAT
+00BA 7001            119             JNZ ES0_COCHE_DETECTADO ;si se detecta coche vamos a evento 1
+                     120             ;SI CONT 5 ESTADO 2, EVENTO 0
+A51 MACRO ASSEMBLER  LAVACOCHES                                                           11/24/2024 16:09:47 PAGE     3
+
+00BC 22              121             RET
+                     122     
+00BD                 123             ES0_COCHE_DETECTADO:
+00BD 753101          124             MOV EVENTO, #1
+00C0 22              125             RET
+                     126     ;===================ESTADO1=======================;
+00C1                 127     ESTADO_1:   
+00C1 11DE            128             ACALL ES1_GEN_EV        ;Generador de eventos para ESPERA FICHA
+00C3 E531            129             MOV A, EVENTO
+00C5 23              130             RL A
+00C6 9000B2          131             MOV DPTR, #ES0_EV_TAB    ; Tabla de eventos del estado 1
+00C9 73              132             JMP @A+DPTR
+                     133     
+00B2                 134             ES0_EV_TAB:             ;TABLA DE EVENTOS
+*** _________________________________^
+*** ERROR #A8 IN 134 (.\Lavacoches.a, LINE 134): ATTEMPT TO DEFINE AN ALREADY DEFINED LABEL
+00CA 01D2            135             AJMP ES1_EV0           ; Evento vacío
+00CC 01D3            136             AJMP ES1_EV1           ; Evento 1: ficha detectada
+00CE 01D7            137             AJMP ES1_EV2           ; Evento 2: contador alcanza 30
+00D0 01DA            138             AJMP ES1_EV3           ; Evento 3: volver al estado inicial
+                     139     
+00D2                 140             ES1_EV0:                ;evento vacío
+00D2 22              141             RET
+                     142     
+00D3                 143             ES1_EV1:                ;Evento 1: ficha detectada
+00D3 753002          144             MOV ESTADO, #02H        ;Cambiar al estado 2
+00D6 22              145             RET
+                     146     
+00D7                 147             ES1_EV2:                ;contador = 30 y ficha = 0
+00D7 D286            148             SETB AL_START
+00D9 22              149             RET
+                     150     
+00DA                 151             ES1_EV3:                ;plataforma vacía, volver a estado 0
+00DA 753000          152             MOV ESTADO, #00H        
+00DD 22              153             RET
+                     154             
+00DE                 155             ES1_GEN_EV:             ;generador de eventos
+00DE 308404          156             JNB S_FICHA, CHECK_TIMER        ; si no hay ficha, mirar timer
+00E1 753101          157             MOV EVENTO, #01H
+00E4 22              158             RET
+                     159     
+00E5                 160             CHECK_TIMER:
+00E5                 161             MOV A, CONT
+*** ________________________________________^
+*** ERROR #A45 IN 161 (.\Lavacoches.a, LINE 161): UNDEFINED SYMBOL (PASS-2)
+00E7 B43009          162             CJNE A, #30H, CHECK_PLAT       ; Si el contador no es 30, verificar plataforma
+00EA 308402          163             JNB S_FICHA, TIMER_EXPIRED     ; Si contador = 30 y no hay ficha, evento 2
+00ED 8004            164             JMP CHECK_PLAT
+                     165     
+00EF                 166             TIMER_EXPIRED:
+00EF 753102          167                     MOV EVENTO, #02H               ; Evento 2: contador = 30 y ficha = 0
+00F2 22              168                     RET
+                     169             
+00F3                 170             CHECK_PLAT:
+00F3 308204          171                     JNB S_PLAT, PLATFORM_EMPTY     ; Si la plataforma está vacía, evento 3
+00F6 753100          172                     MOV EVENTO, #00H               ; Ningún evento, seguir en evento 0
+00F9 22              173                     RET
+                     174             
+00FA                 175             PLATFORM_EMPTY:
+00FA 753103          176                     MOV EVENTO, #03H               ; Evento 3: plataforma vacía
+00FD 22              177                     RET
+                     178     ;===================ESTADO2=======================;
+00FE                 179     ESTADO_2:   
+00FE 3177            180             ACALL MQ_EVEN_2 ;Generador de eventos para ESPERA_BOTON
+0100 E531            181             MOV A,EVENTO
+0102 23              182             RL A
+A51 MACRO ASSEMBLER  LAVACOCHES                                                           11/24/2024 16:09:47 PAGE     4
+
+0103 900107          183             MOV DPTR, #ES2_EV_TAB   ;tabla de eventos del estado 2
+0106 73              184             JMP @A+DPTR
+                     185     
+0107                 186             ES2_EV_TAB:
+0107                 187             AJMP ES2_EV0           ; contador sigue aumentando
+*** ______________________________________^
+*** ERROR #A45 IN 187 (.\Lavacoches.a, LINE 187): UNDEFINED SYMBOL (PASS-2)
+0109                 188             AJMP ES2_EV2           ; alarma activada tras 30 segundos
+*** ______________________________________^
+*** ERROR #A45 IN 188 (.\Lavacoches.a, LINE 188): UNDEFINED SYMBOL (PASS-2)
+010B                 189             AJMP ES2_EV3           ; botón presionado o 60 segundos alcanzados
+*** ______________________________________^
+*** ERROR #A45 IN 189 (.\Lavacoches.a, LINE 189): UNDEFINED SYMBOL (PASS-2)
+                     190     
+                     191     
+010D 22              192             RET 
+                     193     ;===================ESTADO3=======================;
+010E                 194     ESTADO_3:   
+010E 3196            195             ACALL MQ_EVEN_3 ;Generador de eventos para ENJABONADO
+0110 22              196             RET 
+                     197     ;===================ESTADO4=======================;
+0111                 198     ESTADO_4:   
+0111 31B8            199             ACALL MQ_EVEN_4 ;Generador de eventos para FROTADO_TRASERO
+0113 22              200             RET 
+                     201     ;===================ESTADO5=======================;
+0114                 202     ESTADO_5:   
+0114 31CC            203             ACALL MQ_EVEN_5 ;Generador de eventos para FROTADO_LATERAL
+0116 22              204             RET
+                     205     ;===================ESTADO6=======================; 
+0117                 206     ESTADO_6:   
+0117 31EC            207             ACALL MQ_EVEN_6 ;Generador de eventos para FROTADO_FRONTAL
+0119 22              208             RET
+                     209     
+                     210     ;===================ESTADO7=======================;  
+011A                 211     ESTADO_7:   
+011A 510E            212             ACALL MQ_EVEN_7 ;Generador de eventos para ACLARADO
+011C 22              213             RET
+                     214     ;===================ESTADO8=======================;  
+011D                 215     ESTADO_8:   
+011D 512A            216             ACALL MQ_EVEN_8 ;Generador de eventos para SECADO
+011F 22              217             RET 
+                     218     
+                     219     ;----------------------------------- 
+0120                 220     MQ_EVEN_0:              ; Generador de eventos para el estado ESPERA
+0120 E531            221             MOV A, EVENTO
+0122 23              222             RL A 
+0123 900127          223             MOV DPTR, #LIST_EVEN_MQEV_0 
+0126 73              224             JMP @A+DPTR 
+0127                 225     LIST_EVEN_MQEV_0: 
+0127 212F            226             AJMP ME0_EV_0  ; Evento 0 
+0129 2130            227             AJMP ME0_EV_1  ; Evento 1 No hay vehículo en la plataforma
+012B 2137            228             AJMP ME0_EV_2  ; Evento 2 Detección del coche
+012D 213E            229             AJMP ME0_EV_3  ; Evento 3 contador>=5 seg en la plataforma
+                     230     ; Evento 0: null
+012F                 231     ME0_EV_0: 
+012F 22              232             RET 
+                     233     ; Evento 1: no hay vehículo en la plataforma (S_PLAT=0)
+0130                 234     ME0_EV_1:               ;no hay coche
+0130 D280            235             SETB SEM_VERDE  ;encender semáforo verde
+0132 C281            236             CLR SEM_ROJO
+0134                 237             CLR cont
+*** _____________________________________^
+*** ERROR #A45 IN 237 (.\Lavacoches.a, LINE 237): UNDEFINED SYMBOL (PASS-2)
+0136 22              238             RET
+                     239     ; Evento 2: detección del vehículo en la plataforma (S_PLAT=1)
+0137                 240     ME0_EV_2:
+A51 MACRO ASSEMBLER  LAVACOCHES                                                           11/24/2024 16:09:47 PAGE     5
+
+0137 C280            241             CLR SEM_VERDE
+0139 D281            242             SETB SEM_ROJO
+013B                 243             SETB INICIAR_TIMER      ;activa el temporizador
+*** ______________________________________^
+*** ERROR #A45 IN 243 (.\Lavacoches.a, LINE 243): UNDEFINED SYMBOL (PASS-2)
+013D 22              244             RET 
+013E                 245     ME0_EV_3: 
+013E                 246             CLR INICIAR_TIMER
+*** _____________________________________^
+*** ERROR #A45 IN 246 (.\Lavacoches.a, LINE 246): UNDEFINED SYMBOL (PASS-2)
+0140 753001          247             MOV ESTADO, #01H        ;cambiar al estado ESPERA_FICHA
+0143 22              248             RET 
+                     249     
+                     250     ;----------------------------------- 
+0144                 251     MQ_EVEN_1:              ; Generador de eventos para el estado ESPERA_FICHA
+0144 E531            252             MOV A, EVENTO 
+0146 23              253             RL A 
+0147 90014B          254             MOV DPTR, #LIST_EVEN_MQEV_1
+014A 73              255             JMP @A+DPTR 
+014B                 256     LIST_EVEN_MQEV_1: 
+014B 2153            257              AJMP ME1_EV_0  ; Evento 0 
+014D 2154            258              AJMP ME1_EV_1  ; Evento 1 
+014F 2157            259              AJMP ME1_EV_2  ; Evento 2
+0151                 260              AJMP ME1_EV_3  ; Evento 3
+*** _______________________________________^
+*** ERROR #A45 IN 260 (.\Lavacoches.a, LINE 260): UNDEFINED SYMBOL (PASS-2)
+                     261     ; Evento 0: null
+0153                 262     ME1_EV_0: 
+0153 22              263              RET 
+                     264     ; Evento 1: pasan 30s sin ficha
+0154                 265     ME1_EV_1: 
+0154 D286            266             SETB AL_START
+0156 22              267             RET 
+                     268     ; Evento 2: ficha introducida (S_FICHA=1)
+0157                 269     ME1_EV_2:
+0157 E500            270             MOV A, FICHA_TIPO
+*** ________________________________________^
+*** ERROR #A48 IN 270 (.\Lavacoches.a, LINE 270): DATA-ADDRESS EXPECTED
+0159 6007            271             JZ ME1_EV2_NORMAL       ;si FICHA_TIPO=0 lavado normal
+015B                 272             MOV PWM0, #FFH
+*** ____________________________________________^
+*** ERROR #A45 IN 272 (.\Lavacoches.a, LINE 272): UNDEFINED SYMBOL (PASS-2)
+                     273             ;lavado intensivo
+015E D2A6            274             SETB LED_LINT           ;activar lavado intensivo
+0160 2167            275             AJMP ME1_EV2_FIN
+0162                 276     ME1_EV2_NORMAL:
+0162 D2A5            277             SETB LED_LNOR           ;activar lavado normal
+0164 75FC50          278             MOV PWM0, #50H
+0167                 279     ME1_EV2_FIN:
+0167 C286            280             CLR AL_START
+0169 753002          281             MOV ESTADO, #02H        ;cambiar al estado ESPERA_BOTÓN
+016C 22              282             RET
+                     283     ; Evento 3: retira el coche de la plataforma (S_PLAT=0)
+016D                 284     ME1_EV3:
+016D C286            285             CLR AL_START
+016F D280            286             SETB SEM_VERDE
+0171 C281            287             CLR SEM_ROJO
+0173 753000          288             MOV ESTADO, #00H        ;vuelve al estado de ESPERA
+0176 22              289             RET
+                     290     
+                     291     ;----------------------------------- 
+0177                 292     MQ_EVEN_2:              ; Generador de eventos para el estado ESPERA_BOTON
+0177 E531            293             MOV A, EVENTO 
+0179 23              294             RL A 
+017A 90017E          295             MOV DPTR, #LIST_EVEN_MQEV_2      
+017D 73              296             JMP @A+DPTR 
+A51 MACRO ASSEMBLER  LAVACOCHES                                                           11/24/2024 16:09:47 PAGE     6
+
+017E                 297     LIST_EVEN_MQEV_2: 
+017E 2186            298             AJMP ME2_EV_0  ; Evento 0 
+0180 2187            299             AJMP ME2_EV_1  ; Evento 1 
+0182 218A            300             AJMP ME2_EV_2  ; Evento 2
+0184 2190            301             AJMP ME2_EV_3  ; Evento 3
+                     302     ; Evento 0: null
+0186                 303     ME2_EV_0: 
+0186 22              304             RET 
+                     305     ; Evento 1: pasan 30s sin pulsar el botón
+0187                 306     ME2_EV_1: 
+0187 D286            307             SETB AL_START
+0189 22              308             RET 
+                     309     ; Evento 2: pasan 60s sin presionar el botón
+018A                 310     ME2_EV_2: 
+018A C286            311             CLR AL_START
+018C 753003          312             MOV ESTADO, #03H        ;pasa al estado ENJABONADO
+018F 22              313             RET 
+                     314     ; Evento 3: botób de inicio pulsado (P_START=1)
+0190                 315     ME2_EV_3: 
+0190 C286            316             CLR AL_START
+0192 753003          317             MOV ESTADO, #03H        ;pasa al estado ENJABONADO
+0195 22              318             RET 
+                     319     
+                     320     
+                     321     ;----------------------------------- 
+0196                 322     MQ_EVEN_3:      ;eventos que generan en el ESTADO ENJABONADO
+0196 E531            323             MOV A, EVENTO
+0198 23              324             RL A 
+0199 90019D          325             MOV DPTR, #LIST_EVEN_MQEV_3
+019C 73              326             JMP @A+DPTR 
+019D                 327     LIST_EVEN_MQEV_3: 
+019D 21A5            328             AJMP ME3_EV_0  ; Evento 0 
+019F 21A6            329             AJMP ME3_EV_1  ; Evento 1 
+01A1 21AD            330             AJMP ME3_EV_2  ; Evento 2
+01A3 21B2            331             AJMP ME3_EV_3  ; Evento 3 
+                     332     ; Evento 0; null
+01A5                 333     ME3_EV_0: 
+01A5 22              334             RET 
+                     335     ; Evento 1: detecta el coche
+01A6                 336     ME3_EV_1: 
+01A6 D2A0            337             SETB EV_AGUA
+01A8 D2A1            338             SETB EV_JABON
+01AA D290            339             SETB BMOV_FRONT
+01AC 22              340             RET 
+                     341     ; Evento 2: fin detección coche
+01AD                 342     ME3_EV_2: 
+01AD C2A0            343             CLR EV_AGUA
+01AF C2A1            344             CLR EV_JABON
+01B1 22              345             RET 
+01B2                 346     ME3_EV_3: 
+01B2 D290            347             SETB BMOV_FRONT
+01B4 753004          348             MOV ESTADO, #04H        ;pasa a FROTADO
+01B7 22              349             RET 
+                     350     … 
+*** _________________________^
+*** ERROR #A9 IN 350 (.\Lavacoches.a, LINE 350): SYNTAX ERROR
+                     351     
+                     352     ;----------------------------------- 
+01B8                 353     MQ_EVEN_4:              ; Generador de eventos para el estado FROTADO
+01B8 E531            354             MOV A, EVENTO 
+01BA 23              355             RL A 
+01BB 9001BF          356             MOV DPTR, #LIST_EVEN_MQEV_4
+01BE 73              357             JMP @A+DPTR 
+01BF                 358     LIST_EVEN_MQEV_4: 
+01BF 21C3            359              AJMP ME4_EV_0  ; Evento 0 
+01C1 21C4            360              AJMP ME4_EV_1  ; Evento 1
+A51 MACRO ASSEMBLER  LAVACOCHES                                                           11/24/2024 16:09:47 PAGE     7
+
+01C3                 361     ME4_EV_0: 
+01C3 22              362              RET 
+01C4                 363     ME4_EV_1: 
+01C4 D297            364             SETB RV_INTO
+01C6 E5FC            365             MOV A, PWM0
+01C8 753005          366             MOV ESTADO, #05H        ;cambia al estado FROTADO_TRASERA
+01CB 22              367             RET 
+                     368     … 
+*** _________________________^
+*** ERROR #A9 IN 368 (.\Lavacoches.a, LINE 368): SYNTAX ERROR
+                     369     
+                     370     ;----------------------------------- 
+01CC                 371     MQ_EVEN_5:              ; Generador de eventos para el estado FROTADO_TRASERA
+01CC E531            372             MOV A, EVENTO 
+01CE 23              373             RL A 
+01CF 9001D3          374             MOV DPTR, #LIST_EVEN_MQEV_5      
+01D2 73              375             JMP @A+DPTR 
+01D3                 376     LIST_EVEN_MQEV_5: 
+01D3 21DB            377             AJMP ME5_EV_0  ; Evento 0 
+01D5 21DC            378             AJMP ME5_EV_1  ; Evento 1 
+01D7 21DF            379             AJMP ME5_EV_2  ; Evento 2
+01D9 21E4            380             AJMP ME5_EV_3  ; Evento 3
+                     381      
+01DB                 382     ME5_EV_0: 
+01DB 22              383             RET 
+01DC                 384     ME5_EV_1: 
+01DC D297            385             SETB RV_INTO
+                     386             SET PWM0
+*** _________________________________^
+*** ERROR #A9 IN 386 (.\Lavacoches.a, LINE 386): SYNTAX ERROR
+01DE 22              387             RET 
+                     388     
+01DF                 389     ME5_EV_2: 
+01DF C297            390             CLR RV_INTO
+01E1 D296            391             SETB RV_OUTTO
+01E3 22              392             RET 
+01E4                 393     ME5_EV_3: 
+01E4 C296            394             CLR RV_OUTTO
+01E6 C2FC            395             CLR PWM0
+01E8 753006          396             MOV ESTADO, #06H        ;cambia a estado FROTADO_LATERAL
+01EB 22              397             RET 
+                     398     … 
+*** _________________________^
+*** ERROR #A9 IN 398 (.\Lavacoches.a, LINE 398): SYNTAX ERROR
+                     399     
+                     400     
+                     401     ;----------------------------------- 
+01EC                 402     MQ_EVEN_6:              ; Generador de eventos para el estado FROTADO_LATERAL
+01EC E531            403             MOV A, EVENTO
+01EE 23              404             RL A 
+01EF 900127          405             MOV DPTR, #LIST_EVEN_MQEV_0 
+01F2 73              406             JMP @A+DPTR 
+01F3                 407     LIST_EVEN_MQEV_6: 
+01F3 21FD            408             AJMP ME6_EV_0  ; Evento 0 
+01F5 21FE            409             AJMP ME6_EV_1  ; Evento 1 
+01F7 4101            410             AJMP ME6_EV_2  ; Evento 2
+01F9 4108            411             AJMP ME6_EV_3  ; Evento 3
+01FB 410D            412             AJMP ME6_EV_4  ; Evento 4
+01FD                 413     ME6_EV_0: 
+01FD 22              414             RET 
+01FE                 415     ME6_EV_1: 
+01FE D291            416             SETB BMOV_BACK
+0200 22              417             RET 
+0201                 418     ME6_EV_2: 
+0201 C291            419             CLR BMOV_BACK
+0203 D294            420             SETB RH_DOWNTO
+A51 MACRO ASSEMBLER  LAVACOCHES                                                           11/24/2024 16:09:47 PAGE     8
+
+0205 D297            421             SETB RV_INTO
+0207 22              422             RET 
+0208                 423     ME6_EV_3: 
+0208 E500            424             MOV A, SPOS_RV
+*** ________________________________________^
+*** ERROR #A48 IN 424 (.\Lavacoches.a, LINE 424): DATA-ADDRESS EXPECTED
+                     425             
+                     426             
+020A                 427     AJUSTE:
+020A D296            428             SETB RV_OUTTO
+                     429     
+020C 22              430             RET
+020D                 431     ME6_EV_4: 
+020D 22              432             RET 
+                     433     
+                     434     
+                     435     ;----------------------------------- 
+020E                 436     MQ_EVEN_7:              ; Generador de eventos para el estado FROTADO_FRONTAL
+020E E531            437             MOV A, EVENTO 
+0210 23              438             RL A 
+0211 900215          439             MOV DPTR, #LIST_EVEN_MQEV_7
+0214 73              440             JMP @A+DPTR 
+0215                 441     LIST_EVEN_MQEV_7: 
+0215 411B            442              AJMP ME7_EV_0  ; Evento 0 
+0217 411C            443              AJMP ME7_EV_1  ; Evento 1  
+0219 411F            444              AJMP ME7_EV_2  ; Evento 2 
+021B                 445     ME7_EV_0:
+021B 22              446             RET 
+021C                 447     ME7_EV_1: 
+021C D291            448             SETB BMOV_BACK
+021E 22              449             RET 
+021F                 450     ME7_EV_2: 
+021F D297            451             SETB RV_INTO
+0221 22              452             RET 
+0222                 453     ME7_EV_3: 
+0222 C297            454             CLR RV_INTO
+0224 C2FC            455             CLR PWM0
+0226 753008          456             MOV ESTADO, #08H        ;cambiar al estado ACLARADO
+0229 22              457             RET 
+                     458     ;----------------------------------- 
+022A                 459     MQ_EVEN_8:              ; Generador de eventos para el estado ACLARADO
+022A E531            460             MOV A, EVENTO 
+022C 23              461             RL A 
+022D 900231          462             MOV DPTR, #LIST_EVEN_MQEV_8      
+0230 73              463             JMP @A+DPTR 
+0231                 464     LIST_EVEN_MQEV_8: 
+0231 4137            465             AJMP ME8_EV_0  ; Evento 0 
+0233 4138            466             AJMP ME8_EV_1  ; Descripción Maq. Event. 0. Evento 1 
+                     467             …    … 
+*** _________________________________^
+*** ______________________________________^
+*** ERROR #A9 IN 467 (.\Lavacoches.a, LINE 467): SYNTAX ERROR
+*** ERROR #A3 IN 467 (.\Lavacoches.a, LINE 467): ILLEGAL CHARACTER
+0235                 468             AJMP ME8_EV_k  ; Descripción Maq. Event. 0. Evento k 
+*** ______________________________________^
+*** ERROR #A45 IN 468 (.\Lavacoches.a, LINE 468): UNDEFINED SYMBOL (PASS-2)
+0237                 469     ME8_EV_0: 
+0237 22              470             RET 
+0238                 471     ME8_EV_1: 
+                     472             [ACCIÓN_i] 
+*** _________________________________^
+*** ______________________________________^
+*** __________________________________________^
+*** ERROR #A9 IN 472 (.\Lavacoches.a, LINE 472): SYNTAX ERROR
+*** ERROR #A3 IN 472 (.\Lavacoches.a, LINE 472): ILLEGAL CHARACTER
+*** ERROR #A3 IN 472 (.\Lavacoches.a, LINE 472): ILLEGAL CHARACTER
+A51 MACRO ASSEMBLER  LAVACOCHES                                                           11/24/2024 16:09:47 PAGE     9
+
+                     473             [ACCIÓN_ii] 
+*** _________________________________^
+*** ______________________________________^
+*** ___________________________________________^
+*** ERROR #A9 IN 473 (.\Lavacoches.a, LINE 473): SYNTAX ERROR
+*** ERROR #A3 IN 473 (.\Lavacoches.a, LINE 473): ILLEGAL CHARACTER
+*** ERROR #A3 IN 473 (.\Lavacoches.a, LINE 473): ILLEGAL CHARACTER
+                     474             … 
+*** _________________________________^
+*** ERROR #A9 IN 474 (.\Lavacoches.a, LINE 474): SYNTAX ERROR
+0238 22              475             RET 
+                     476     … 
+*** _________________________^
+*** ERROR #A9 IN 476 (.\Lavacoches.a, LINE 476): SYNTAX ERROR
+                     477     
+                     478     ;----------------------------------- 
+0239                 479     MQ_EVEN_9:              ; Generador de eventos para el estado SECADO
+0239 E531            480             MOV A, EVENTO
+023B 23              481             RL A 
+023C 900240          482             MOV DPTR, #LIST_EVEN_MQEV_9
+023F 73              483             JMP @A+DPTR 
+0240                 484     LIST_EVEN_MQEV_9: 
+0240 414E            485             AJMP ME9_EV_0  ; Evento 0 
+0242 414F            486             AJMP ME9_EV_1  ; Evento 1 
+0244                 487             AJMP ME9_EV_2  ; Evento 2
+*** ______________________________________^
+*** ERROR #A45 IN 487 (.\Lavacoches.a, LINE 487): UNDEFINED SYMBOL (PASS-2)
+0246                 488             AJMP ME9_EV_3  ; Evento 3
+*** ______________________________________^
+*** ERROR #A45 IN 488 (.\Lavacoches.a, LINE 488): UNDEFINED SYMBOL (PASS-2)
+0248                 489             AJMP ME9_EV_4  ; Evento 4 
+*** ______________________________________^
+*** ERROR #A45 IN 489 (.\Lavacoches.a, LINE 489): UNDEFINED SYMBOL (PASS-2)
+024A                 490             AJMP ME9_EV_5  ; Evento 5
+*** ______________________________________^
+*** ERROR #A45 IN 490 (.\Lavacoches.a, LINE 490): UNDEFINED SYMBOL (PASS-2)
+024C                 491             AJMP ME9_EV_6  ; Evento 6
+*** ______________________________________^
+*** ERROR #A45 IN 491 (.\Lavacoches.a, LINE 491): UNDEFINED SYMBOL (PASS-2)
+024E                 492     ME9_EV_0: 
+024E 22              493             RET 
+024F                 494     ME9_EV_1: 
+                     495             
+024F 22              496             RET 
+                     497     
+                     498     
+                     499     END
+A51 MACRO ASSEMBLER  LAVACOCHES                                                           11/24/2024 16:09:47 PAGE    10
+
+SYMBOL TABLE LISTING
+------ ----- -------
+
+
+N A M E              T Y P E  V A L U E   ATTRIBUTES
+
+ACCI. . . . . . . .    ----   -----       
+AJUSTE. . . . . . .  C ADDR   020AH   A   
+AL_START. . . . . .  B ADDR   0080H.6 A   
+BMOV_BACK . . . . .  B ADDR   0090H.1 A   
+BMOV_FRONT. . . . .  B ADDR   0090H.0 A   
+BPOS_START. . . . .  B ADDR   0080H.7 A   
+BUCLE . . . . . . .  C ADDR   007DH   A   
+CHECK_PLAT. . . . .  C ADDR   00F3H   A   
+CHECK_TIMER . . . .  C ADDR   00E5H   A   
+CONT. . . . . . . .    ----   -----       
+ES0_COCHE_DETECTADO  C ADDR   00BDH   A   
+ES0_EV0 . . . . . .  C ADDR   00B6H   A   
+ES0_EV1 . . . . . .  C ADDR   00B7H   A   
+ES0_EV_TAB. . . . .  C ADDR   00B2H   A   
+ES0_GEN_EV. . . . .  C ADDR   00B8H   A   
+ES1_EV0 . . . . . .  C ADDR   00D2H   A   
+ES1_EV1 . . . . . .  C ADDR   00D3H   A   
+ES1_EV2 . . . . . .  C ADDR   00D7H   A   
+ES1_EV3 . . . . . .  C ADDR   00DAH   A   
+ES1_GEN_EV. . . . .  C ADDR   00DEH   A   
+ES2_EV0 . . . . . .    ----   -----       
+ES2_EV2 . . . . . .    ----   -----       
+ES2_EV3 . . . . . .    ----   -----       
+ES2_EV_TAB. . . . .  C ADDR   0107H   A   
+ESTADO. . . . . . .  N NUMB   0030H   A   
+ESTADO_0. . . . . .  C ADDR   00A9H   A   
+ESTADO_1. . . . . .  C ADDR   00C1H   A   
+ESTADO_2. . . . . .  C ADDR   00FEH   A   
+ESTADO_3. . . . . .  C ADDR   010EH   A   
+ESTADO_4. . . . . .  C ADDR   0111H   A   
+ESTADO_5. . . . . .  C ADDR   0114H   A   
+ESTADO_6. . . . . .  C ADDR   0117H   A   
+ESTADO_7. . . . . .  C ADDR   011AH   A   
+ESTADO_8. . . . . .  C ADDR   011DH   A   
+EVENTO. . . . . . .  N NUMB   0031H   A   
+EV_AGUA . . . . . .  B ADDR   00A0H.0 A   
+EV_JABON. . . . . .  B ADDR   00A0H.1 A   
+FC_RH_TOP . . . . .  B ADDR   0090H.2 A   
+FC_RV_BORDE . . . .  B ADDR   0090H.5 A   
+FC_RV_CENTRO. . . .  B ADDR   00A0H.4 A   
+FFH . . . . . . . .    ----   -----       
+FICHA_TIPO. . . . .  B ADDR   0080H.3 A   
+FSM . . . . . . . .  C ADDR   0090H   A   
+INICIAR_TIMER . . .    ----   -----       
+INICIO. . . . . . .  C ADDR   007BH   A   
+INIT. . . . . . . .  C ADDR   0081H   A   
+LED_LINT. . . . . .  B ADDR   00A0H.6 A   
+LED_LNOR. . . . . .  B ADDR   00A0H.5 A   
+LISTA_EST . . . . .  C ADDR   0097H   A   
+LIST_EVEN_MQEV_0. .  C ADDR   0127H   A   
+LIST_EVEN_MQEV_1. .  C ADDR   014BH   A   
+LIST_EVEN_MQEV_2. .  C ADDR   017EH   A   
+LIST_EVEN_MQEV_3. .  C ADDR   019DH   A   
+LIST_EVEN_MQEV_4. .  C ADDR   01BFH   A   
+LIST_EVEN_MQEV_5. .  C ADDR   01D3H   A   
+LIST_EVEN_MQEV_6. .  C ADDR   01F3H   A   
+LIST_EVEN_MQEV_7. .  C ADDR   0215H   A   
+LIST_EVEN_MQEV_8. .  C ADDR   0231H   A   
+LIST_EVEN_MQEV_9. .  C ADDR   0240H   A   
+ME0_EV_0. . . . . .  C ADDR   012FH   A   
+A51 MACRO ASSEMBLER  LAVACOCHES                                                           11/24/2024 16:09:47 PAGE    11
+
+ME0_EV_1. . . . . .  C ADDR   0130H   A   
+ME0_EV_2. . . . . .  C ADDR   0137H   A   
+ME0_EV_3. . . . . .  C ADDR   013EH   A   
+ME1_EV2_FIN . . . .  C ADDR   0167H   A   
+ME1_EV2_NORMAL. . .  C ADDR   0162H   A   
+ME1_EV3 . . . . . .  C ADDR   016DH   A   
+ME1_EV_0. . . . . .  C ADDR   0153H   A   
+ME1_EV_1. . . . . .  C ADDR   0154H   A   
+ME1_EV_2. . . . . .  C ADDR   0157H   A   
+ME1_EV_3. . . . . .    ----   -----       
+ME2_EV_0. . . . . .  C ADDR   0186H   A   
+ME2_EV_1. . . . . .  C ADDR   0187H   A   
+ME2_EV_2. . . . . .  C ADDR   018AH   A   
+ME2_EV_3. . . . . .  C ADDR   0190H   A   
+ME3_EV_0. . . . . .  C ADDR   01A5H   A   
+ME3_EV_1. . . . . .  C ADDR   01A6H   A   
+ME3_EV_2. . . . . .  C ADDR   01ADH   A   
+ME3_EV_3. . . . . .  C ADDR   01B2H   A   
+ME4_EV_0. . . . . .  C ADDR   01C3H   A   
+ME4_EV_1. . . . . .  C ADDR   01C4H   A   
+ME5_EV_0. . . . . .  C ADDR   01DBH   A   
+ME5_EV_1. . . . . .  C ADDR   01DCH   A   
+ME5_EV_2. . . . . .  C ADDR   01DFH   A   
+ME5_EV_3. . . . . .  C ADDR   01E4H   A   
+ME6_EV_0. . . . . .  C ADDR   01FDH   A   
+ME6_EV_1. . . . . .  C ADDR   01FEH   A   
+ME6_EV_2. . . . . .  C ADDR   0201H   A   
+ME6_EV_3. . . . . .  C ADDR   0208H   A   
+ME6_EV_4. . . . . .  C ADDR   020DH   A   
+ME7_EV_0. . . . . .  C ADDR   021BH   A   
+ME7_EV_1. . . . . .  C ADDR   021CH   A   
+ME7_EV_2. . . . . .  C ADDR   021FH   A   
+ME7_EV_3. . . . . .  C ADDR   0222H   A   
+ME8_EV_0. . . . . .  C ADDR   0237H   A   
+ME8_EV_1. . . . . .  C ADDR   0238H   A   
+ME8_EV_K. . . . . .    ----   -----       
+ME9_EV_0. . . . . .  C ADDR   024EH   A   
+ME9_EV_1. . . . . .  C ADDR   024FH   A   
+ME9_EV_2. . . . . .    ----   -----       
+ME9_EV_3. . . . . .    ----   -----       
+ME9_EV_4. . . . . .    ----   -----       
+ME9_EV_5. . . . . .    ----   -----       
+ME9_EV_6. . . . . .    ----   -----       
+MQ_EVEN_0 . . . . .  C ADDR   0120H   A   
+MQ_EVEN_1 . . . . .  C ADDR   0144H   A   
+MQ_EVEN_2 . . . . .  C ADDR   0177H   A   
+MQ_EVEN_3 . . . . .  C ADDR   0196H   A   
+MQ_EVEN_4 . . . . .  C ADDR   01B8H   A   
+MQ_EVEN_5 . . . . .  C ADDR   01CCH   A   
+MQ_EVEN_6 . . . . .  C ADDR   01ECH   A   
+MQ_EVEN_7 . . . . .  C ADDR   020EH   A   
+MQ_EVEN_8 . . . . .  C ADDR   022AH   A   
+MQ_EVEN_9 . . . . .  C ADDR   0239H   A   
+N_I . . . . . . . .    ----   -----       
+N_II. . . . . . . .    ----   -----       
+P0. . . . . . . . .  D ADDR   0080H   A   
+P1. . . . . . . . .  D ADDR   0090H   A   
+P2. . . . . . . . .  D ADDR   00A0H   A   
+P5. . . . . . . . .    ----   -----       
+PLATFORM_EMPTY. . .  C ADDR   00FAH   A   
+PWM0. . . . . . . .  N NUMB   00FCH   A   
+PWM1. . . . . . . .  N NUMB   00FDH   A   
+P_START . . . . . .  B ADDR   0080H.5 A   
+RH_DOWNTO . . . . .  B ADDR   0090H.4 A   
+RH_UPTO . . . . . .  B ADDR   0090H.3 A   
+RV_INTO . . . . . .  B ADDR   0090H.7 A   
+A51 MACRO ASSEMBLER  LAVACOCHES                                                           11/24/2024 16:09:47 PAGE    12
+
+RV_OUTTO. . . . . .  B ADDR   0090H.6 A   
+SEM_ROJO. . . . . .  B ADDR   0080H.1 A   
+SEM_VERDE . . . . .  B ADDR   0080H.0 A   
+SPOS_RH . . . . . .  B ADDR   0020H.0 A   
+SPOS_RV . . . . . .  B ADDR   0020H.1 A   
+S_CAR . . . . . . .  B ADDR   00A0H.3 A   
+S_FICHA . . . . . .  B ADDR   0080H.4 A   
+S_PLAT. . . . . . .  B ADDR   0080H.2 A   
+TIMER_EXPIRED . . .  C ADDR   00EFH   A   
+
+
+REGISTER BANK(S) USED: 0 
+
+
+ASSEMBLY COMPLETE.  0 WARNING(S), 34 ERROR(S)

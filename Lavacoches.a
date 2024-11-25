@@ -39,20 +39,24 @@ PWM0        EQU 0xFC     ; PWM0 para velocidad de los rodillos
 PWM1        EQU 0XFD     ; PWM1 para velocidad de los ventiladores de secado
 
 ; Puerto A/D
-SPOS_RH     EQU P5.0     ; Sensor analógico para distancia del rodillo horizontal
-SPOS_RV     EQU P5.1     ; Sensor analógico para distancia de rodillos verticales
+ADC EQU 0xC4 ;P5, no es bit adressable
+;SPOS_RH     EQU P5.0     ; Sensor analógico para distancia del rodillo horizontal
+;SPOS_RV     EQU P5.1     ; Sensor analógico para distancia de rodillos verticales
 ;-----------------------------------------------------------------------
 ;Directivas ORG para el programa de inicio y las ISR
+ORG 0000H
+
+AJMP INICIO
+
+ORG 0x7B
 ;-----------------------------------------------------------------------
 ;Programa principal
-ORG 0000H
+
 INICIO:
-	ACALL INIT	;llamada a inicializaciones
- 	
-	BUCLE:		;bucle principal
- 		ACALL MAQ_ESTADOS	;Máquina de estado
- 		ACALL FSM		;Finite State Machine
- 		
+	ACALL INIT			;llamada a inicializaciones
+	BUCLE:				;bucle principal
+ 		;ACALL GENERADOR_EVENTOS
+ 		ACALL FSM		;Finite State Machine, máquina de estados
 		AJMP BUCLE		;Repetir bucle principal
 ;-----------------------------------------------------------------------
 ;Inicializaciones
@@ -69,15 +73,11 @@ INIT:
 
     	RET
 
-	
-
 	;INICIALIZACIÓN DE FLAGS
-
 	;INICIALIZACIÓN DE INTERRUPCIONES
 ;-----------------------------------------------------------------------
-;MÁQUINA DE ESTADOS
-
-MAQ_ESTADOS: 
+;FSM
+FSM: 
 	MOV A, ESTADO	;leer el estado actual
 	RL A 
 	MOV DPTR, #LISTA_EST 
@@ -87,45 +87,147 @@ LISTA_EST:
 	AJMP ESTADO_1  ; ESPERA_FICHA Estado 1 
 	AJMP ESTADO_2  ; ESPERA_BOTÓN Estado 2 
 	AJMP ESTADO_3  ; ENJABONADO Estado 3  
-	AJMP ESTADO_4  ; FROTADO Estado 4 
-	AJMP ESTADO_5  ; FROTADO_TRASERO Estado 5 
-	AJMP ESTADO_6  ; FROTADO_LATERAL Estado 6 
-	AJMP ESTADO_7  ; FROTADO_FRONTAL Estado 7 
-	AJMP ESTADO_8  ; ACLARADO Estado 8 
-	AJMP ESTADO_9  ; SECADO Estado 9  
+	AJMP ESTADO_4  ; FROTADO_TRASERO Estado 4 
+	AJMP ESTADO_5  ; FROTADO_LATERAL Estado 5 
+	AJMP ESTADO_6  ; FROTADO_FRONTAL Estado 6 
+	AJMP ESTADO_7  ; ACLARADO Estado 7 
+	AJMP ESTADO_8  ; SECADO Estado 8
 
-	 
+;===================ESTADO0=======================;	 
 ESTADO_0:   
- 	ACALL MQ_EVEN_0	;Generador de eventos para ESPERA
-	RET 
+ 	ACALL ES0_GEN_EV	;Generador de eventos para ESPERA semáforo verde
+	MOV A, EVENTO
+	RL A
+	MOV DPTR, #ES0_EV_TAB
+	JMP @A+DPTR
+
+	ES0_EV_TAB:		;TABLA DE EVENTOS
+	AJMP ES0_EV0
+	AJMP ES0_EV1
+
+	ES0_EV0:		;evento vacío
+	RET
+
+	ES0_EV1:
+	;activar contador
+	RET
+	
+	ES0_GEN_EV: 		;generador de eventos
+	MOV A, P0
+	ANL A, #00000100b 
+	JB P0.2, COCHE_DETECTADO ;si se detecta coche vamos a evento 1
+	;SI CONT 5 ESTADO 2, EVENTO 0
+	RET
+
+	ES0_COCHE_DETECTADO:
+	MOV EVENTO, #1
+	RET
+;===================ESTADO1=======================;
 ESTADO_1:   
- 	ACALL MQ_EVEN_1 ;Generador de eventos para ESPERA_FICHA
- 	RET 
+ 	ACALL ES1_GEN_EV	;Generador de eventos para ESPERA FICHA
+	MOV A, EVENTO
+	RL A
+	MOV DPTR, #ES0_EV_TAB	 ; Tabla de eventos del estado 1
+	JMP @A+DPTR
+
+	ES0_EV_TAB:		;TABLA DE EVENTOS
+	AJMP ES1_EV0           ; Evento vacío
+	AJMP ES1_EV1           ; Evento 1: ficha detectada
+	AJMP ES1_EV2           ; Evento 2: contador alcanza 30
+	AJMP ES1_EV3           ; Evento 3: volver al estado inicial
+
+	ES1_EV0:		;evento vacío
+	RET
+
+	ES1_EV1:		;contador = 30 y ficha = 0
+	SETB AL_START	
+	RET
+
+	ES1_EV2:		;ficha detectada
+	MOV ESTADO, #02H	;Cambiar al estado 2
+	MOV A, FICHA_TIPO
+	JZ LAVADO_NORMAL	;si FICHA_TIPO=0 lavado normal
+	MOV PWM0, #FFH
+	SETB LED_LINT		;activar lavado intensivo
+	RET
+
+	LAVADO_NORMAL:
+	SETB LED_LNOR		;activar lavado normal
+	MOV PWM0, #50H
+	RET
+
+	ES1_EV3:		;plataforma vacía, volver a estado 0
+	MOV ESTADO, #00H	
+	RET
+	
+	ES1_GEN_EV: 		;generador de eventos
+	JNB S_FICHA, CHECK_TIMER	; si no hay ficha, mirar timer
+	MOV EVENTO, #01H
+	RET
+
+	CHECK_TIMER:
+	MOV A, CONT
+	CJNE A, #30H, CHECK_PLAT       ; Si el contador no es 30, verificar plataforma
+	JNB S_FICHA, TIMER_EXPIRED     ; Si contador = 30 y no hay ficha, evento 2
+	JMP CHECK_PLAT
+
+	TIMER_EXPIRED:
+		MOV EVENTO, #02H               ; Evento 2: contador = 30 y ficha = 0
+		RET
+	
+	CHECK_PLAT:
+		JNB S_PLAT, PLATFORM_EMPTY     ; Si la plataforma está vacía, evento 3
+		MOV EVENTO, #00H               ; Ningún evento, seguir en evento 0
+		RET
+	
+	PLATFORM_EMPTY:
+		MOV EVENTO, #03H               ; Evento 3: plataforma vacía
+		RET
+;===================ESTADO2=======================;
 ESTADO_2:   
  	ACALL MQ_EVEN_2 ;Generador de eventos para ESPERA_BOTON
+	MOV A,EVENTO
+	RL A
+	MOV DPTR, #ES2_EV_TAB 	;tabla de eventos del estado 2
+	JMP @A+DPTR
+
+	ES2_EV_TAB:
+	AJMP ES2_EV0           ; contador sigue aumentando
+	AJMP ES2_EV1           ; alarma activada tras 30 segundos
+	AJMP ES2_EV2           ; botón presionado o 60 segundos alcanzados
+	
+	ES2_EV0:
+	RET
+
+	ES2_EV1:		;30S sin boton
+	SETB AL_START
+
  	RET 
+;===================ESTADO3=======================;
 ESTADO_3:   
  	ACALL MQ_EVEN_3 ;Generador de eventos para ENJABONADO
  	RET 
+;===================ESTADO4=======================;
 ESTADO_4:   
- 	ACALL MQ_EVEN_4 ;Generador de eventos para FROTADO
+ 	ACALL MQ_EVEN_4 ;Generador de eventos para FROTADO_TRASERO
  	RET 
+;===================ESTADO5=======================;
 ESTADO_5:   
- 	ACALL MQ_EVEN_5 ;Generador de eventos para FROTADO_TRASERO
- 	RET 
+ 	ACALL MQ_EVEN_5 ;Generador de eventos para FROTADO_LATERAL
+ 	RET
+;===================ESTADO6=======================; 
 ESTADO_6:   
- 	ACALL MQ_EVEN_6 ;Generador de eventos para FROTADO_LATERAL
- 	RET 
-ESTADO_7:   
- 	ACALL MQ_EVEN_7 ;Generador de eventos para FROTADO_FRONTAL
- 	RET 
-ESTADO_8:   
- 	ACALL MQ_EVEN_8 ;Generador de eventos para ACLARADO
- 	RET 
-ESTADO_9:   
- 	ACALL MQ_EVEN_9 ;Generador de eventos para SECADO
- 	RET 
+ 	ACALL MQ_EVEN_6 ;Generador de eventos para FROTADO_FRONTAL
+ 	RET
 
+;===================ESTADO7=======================;  
+ESTADO_7:   
+ 	ACALL MQ_EVEN_7 ;Generador de eventos para ACLARADO
+ 	RET
+;===================ESTADO8=======================;  
+ESTADO_8:   
+ 	ACALL MQ_EVEN_8 ;Generador de eventos para SECADO
+ 	RET 
 
 ;----------------------------------- 
 MQ_EVEN_0: 		; Generador de eventos para el estado ESPERA
@@ -179,14 +281,16 @@ ME1_EV_1:
 ; Evento 2: ficha introducida (S_FICHA=1)
 ME1_EV_2:
 	MOV A, FICHA_TIPO
-	JZ ME1_EV2_NORMAL	;si FICHA_TIPO=0 lavado normal
-	MOV PWM0, #FFH
+	JZ LAVADO_NORMAL	;si FICHA_TIPO=0 lavado normal
+	MOV PWM0, #00H
+	MOV PWM1, #00H
 	;lavado intensivo
 	SETB LED_LINT		;activar lavado intensivo
 	AJMP ME1_EV2_FIN
-ME1_EV2_NORMAL:
+LAVADO_NORMAL:
 	SETB LED_LNOR		;activar lavado normal
 	MOV PWM0, #50H
+
 ME1_EV2_FIN:
 	CLR AL_START
 	MOV ESTADO, #02H	;cambiar al estado ESPERA_BOTÓN
