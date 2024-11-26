@@ -1,32 +1,32 @@
-; Configuración inicial
+; ConfiguraciÃ³n inicial
 ORG 0x00
 AJMP INICIO          ; Salta al inicio del programa
 
 ORG 0X0B
 AJMP TIMER0_ISR
 
-ORG 0X7B         ; Vector de interrupción del Timer 0
+ORG 0X7B         ; Vector de interrupciÃ³n del Timer 0
 INICIO:
 ACALL INIT
 MAIN:
 SJMP MAIN
 
 INIT:
-    ; Inicialización del Timer 0
+    ; InicializaciÃ³n del Timer 0
 
     MOV TMOD, #01H      ; Timer 0 en modo 1 (16 bits)
-    MOV TH0, #00H       ; Valor alto para 601
-    MOV TL0, #22H       ; Valor bajo para 601
+    MOV TH0, #02H       ; Valor alto para 601
+    MOV TL0, #59H       ; Valor bajo para 601
     MOV R0, #00H        ; Contador de desbordamientos
     MOV R1, #00H
     SETB TR0            ; Activa el Timer 0
 
-    ; Configuración de interrupciones
-    SETB ET0            ; Habilita interrupción del Timer 0
+    ; ConfiguraciÃ³n de interrupciones
+    SETB ET0            ; Habilita interrupciÃ³n del Timer 0
     SETB IE.7            ; Habilita interrupciones globales
     RET
 
-; Rutina de interrupción del Timer 0
+; Rutina de interrupciÃ³n del Timer 0
 TIMER0_ISR:
     PUSH PSW
     PUSH ACC            ; Guarda el acumulador
@@ -35,7 +35,7 @@ TIMER0_ISR:
     MOV TL0, #59H
     
     INC R0              ; Incrementa el contador en R0
-    CJNE R0, #77, NO_5SEG ; ¿Llegó al final?
+    CJNE R0, #77, NO_5SEG ; Â¿LlegÃ³ al final?
     ;al alcanzar 5 segundos
     MOV R1, #01H
     CLR TR0
@@ -44,7 +44,7 @@ TIMER0_ISR:
     NO_5SEG:
     POP ACC             ; Restaura el acumulador
     POP PSW             ; Restaura el registro PSW
-    RETI                ; Retorna de la interrupción
+    RETI                ; Retorna de la interrupciÃ³n
 
 END
 
