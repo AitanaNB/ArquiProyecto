@@ -1,0 +1,732 @@
+; PROYECTO
+;-----------------------------------------------------------------------
+;Se definen las EQUs
+
+ESTADO    EQU R6     ; Variable para el estado actual (en RAM interna)
+EVENTO    EQU R7     ; Variable para el evento actual (en RAM interna)
+
+; Definiciones de puertos
+; Puerto 0
+SEM_VERDE   EQU 0x80.0     ; Semáforo verde
+SEM_ROJO    EQU 0x80.1     ; Semáforo rojo
+S_PLAT      EQU 0x80.2     ; Sensor de coche en plataforma
+FICHA_TIPO  EQU 0x80.3     ; Tipo de ficha (1: intensivo, 0: normal)
+S_FICHA     EQU 0x80.4     ; Sensor de ficha introducida
+P_START     EQU 0x80.5     ; Botón de inicio
+AL_START    EQU 0x80.6     ; Alarma activa
+BPOS_START  EQU 0x80.7     ; Fin de carrera del puente en posición inicial
+
+; Puerto 1
+BMOV_FRONT  EQU 0x90.0     ; Movimiento del puente hacia adelante
+BMOV_BACK   EQU 0x90.1     ; Movimiento del puente hacia atrás
+FC_RH_TOP   EQU 0x90.2     ; Fin de carrera del rodillo horizontal en parte alta
+RH_UPTO     EQU 0x90.3     ; Mueve el rodillo horizontal hacia arriba
+RH_DOWNTO   EQU 0x90.4     ; Mueve el rodillo horizontal hacia abajo
+FC_RV_BORDE EQU 0x90.5     ; Fin de carrera de rodillos verticales en posición externa
+RV_OUTTO    EQU 0x90.6     ; Mueve los rodillos verticales hacia afuera
+RV_INTO     EQU 0x90.7     ; Mueve los rodillos verticales hacia adentro
+
+; Puerto 2
+EV_AGUA     EQU 0xA0.0     ; Activa la bomba de agua
+EV_JABON    EQU 0xA0.1     ; Activa la bomba de jabón
+S_CAR       EQU 0xA0.3     ; Sensor de presencia del vehículo en el puente
+FC_RV_CENTRO EQU 0xA0.4    ; Fin de carrera de rodillos verticales en posición central
+LED_LNOR    EQU 0xA0.5     ; LED para lavado normal
+LED_LINT    EQU 0xA0.6     ; LED para lavado intensivo
+
+; Canales PWM
+PWM0        EQU 0xFC       ; PWM0 para velocidad de los rodillos
+PWM1        EQU 0XFD       ; PWM1 para velocidad de los ventiladores de secado
+
+; Puerto A/D (Puerto 5)
+ACD EQU 0xC4
+;SPOS_RH     EQU 0xC4.0    ; Sensor analógico para distancia del rodillo horizontal
+;SPOS_RV     EQU 0xC4.1    ; Sensor analógico para distancia de rodillos verticales
+
+; Flags
+FLAG_MOV_INIT EQU 0xF0.0
+
+
+FLAG_T0_5  EQU 0xF0.2     ; B.2 FLAG T0 >=5s
+FLAG_T0_30  EQU 0xF0.3     ; B.3 FLAG T0 >=30s
+FLAG_T0_60  EQU 0xF0.4     ; B.4 FLAG T0 >=60s
+FLAG_T0_4  EQU 0XF0.5     ; 4s para avanzar 40cm
+
+
+;-----------------------------------------------------------------------
+; Directivas ORG para el programa de inicio y las ISR
+ORG 0x00
+AJMP INICIO
+
+ORG 0X0B
+AJMP TIMER0_ISR       ; Vector de interrupción del Timer 0
+;-----------------------------------------------------------------------
+; Programa principal
+ORG 0x7B          ;se escribe el programa a partir de la dirección de memoria 0x7B
+INICIO:
+      ACALL INIT  ;llamada a inicializaciones
+      
+      BUCLE:                        ;bucle principal
+            ACALL GENERADOR_EVENTOS ;Generador de eventos
+            ACALL FSM         ;Finite State Machine
+            
+            AJMP BUCLE        ;Repetir bucle principal
+;-----------------------------------------------------------------------
+;Inicializaciones
+INIT:
+      ;INICIALIZACIÓN DE REGISTROS
+      MOV A, #00H       ;se inicializa los registros
+      MOV ESTADO, #00H  ;se empieza en el ESTADO ESPERA
+      MOV EVENTO, #00H  ;se empieza con el EVENTO 0
+      SETB SEM_VERDE
+      
+      ;ENTRADAS
+      SETB P0.2
+      SETB P0.3
+      SETB P0.4
+      SETB P0.5
+      SETB P0.7
+      SETB P1.2
+      SETB P1.5
+      SETB P2.3
+      SETB P2.4
+
+      ; SALIDAS
+      CLR SEM_ROJO
+      CLR AL_START
+      CLR BMOV_FRONT 
+      CLR BMOV_BACK
+      CLR RH_UPTO
+      CLR RH_DOWNTO
+      CLR RV_OUTTO
+      CLR RV_INTO
+      CLR EV_AGUA
+      CLR EV_JABON
+      CLR FC_RV_CENTRO
+      CLR LED_LNOR
+      CLR LED_LINT
+
+      ;INICIALIZACIÓN DE PUERTOS DE SALIDA
+      ;MOV P0,#00H
+      ;MOV P1,#00H
+      ;MOV P2,#00H
+      MOV PWM0, #0xFF
+      MOV PWM1, #0XFF
+      
+      ;INICIALIZACIÓN DE FLAGS
+      CLR FLAG_T0_5  
+      CLR FLAG_T0_30
+      CLR FLAG_T0_60
+      CLR FLAG_T0_4
+
+      ;INICIALIZACIÓN DE INTERRUPCIONES
+      SETB IE.1         ;habilitador interrupción overflow Timer 0
+      SETB IE.0         ;habilitador interrupción externa 0
+      SETB 0xA8.6       ;habilitador interrupción ADC
+
+      ; Inicialización del Timer 0
+      MOV TMOD, #01H      ; Timer 0 en modo 1 (16 bits)
+      MOV TH0, #00H       ; Precarga Valor alto para 0
+      MOV TL0, #00H       ; Valor bajo para 0
+      MOV R0, #00H        ; Contador de desbordamientos (ciclos) BAJO
+      
+      ; Configuración de interrupciones
+      SETB ET0                ; Habilita interrupción del Timer 0 
+          
+      SETB IE.7               ; Habilita interrupciones globales 
+      
+      ;adc
+      RET
+;-----------------------------------------------------------------------
+; GENERADOR DE EVENTOS
+GENERADOR_EVENTOS:
+      MOV A,     ESTADO             ;en función del estado en que nos encontremos se generarán unos eventos u otros
+      RL A
+      MOV DPTR,  #JMP_TABLE
+      JMP @A+DPTR
+      JMP_TABLE:
+            AJMP GEN_ESTADO_0   ; ESPERA
+            AJMP GEN_ESTADO_1   ; ESPERA_FICHA
+            AJMP GEN_ESTADO_2   ; ESPERA_BOTÓN
+            AJMP GEN_ESTADO_3   ; ENJABONADO
+            AJMP GEN_ESTADO_4   ; FROTADO_TRASERA
+            AJMP GEN_ESTADO_5   ; FROTADO_LATERAL
+            AJMP GEN_ESTADO_6   ; FROTADO_FRONTAL
+            AJMP GEN_ESTADO_7   ; ACLARADO
+            AJMP GEN_ESTADO_8   ; SECADO
+
+      GEN_ESTADO_0:                       ;eventos que se generan en el ESTADO 0
+            JNB S_PLAT, SALTO_EV1
+            ; Si no hay coche
+            JB FLAG_T0_5, SALTO_EV3 	;si ha saltado el flag
+            JB S_PLAT, SALTO_EV2	;si hay coche
+            MOV EVENTO, #00H
+            AJMP FIN_TABLE
+
+            SALTO_EV1:
+            AJMP EV_1
+            SALTO_EV2:
+            AJMP EV_2
+            SALTO_EV3:
+            AJMP EV_3
+            
+      GEN_ESTADO_1:                       ;eventos que se generan en el ESTADO 1
+            JB FLAG_T0_30, SALTO_EV4            ; Si pasan 30s sin ficha, activar EV4
+            JB S_FICHA, SALTO_EV5         ; Si se introduce ficha, activar EV5
+            JNB S_PLAT, EV_1        ; Si se retira el coche, activar EV1
+            MOV EVENTO, #00H
+            AJMP FIN_TABLE
+
+            SALTO_EV4:
+            AJMP EV_4
+            SALTO_EV5:
+            AJMP EV_5
+
+      GEN_ESTADO_2:                       ;eventos que se generan en el ESTADO 2
+            JB FLAG_T0_30, EV_6           ; Si pasan 30s sin botón, activar EV6
+            JB FLAG_T0_60, EV_7           ; Si pasan 60s sin botón, activar EV7
+            JB P_START, EV_8        ; Si botón de inicio pulsado, activar EV8
+            MOV EVENTO, #00H
+            AJMP FIN_TABLE
+      GEN_ESTADO_3:                       ;eventos que se generan en el ESTADO 3
+            JB S_CAR, EV_9                ; Si detecta el coche, activar EV9
+            ; EV19: Inicia movimiento hacia adelante
+            ; SETB FLAG_T2_04 para probar
+            JB FLAG_MOV_INIT, SALTO_EV19 ; Si FLAG_MOV_INIT está encendido, activar EV19  
+            SJMP CONTINUA
+            SALTO_EV19:
+                  AJMP EV_19
+            CONTINUA:
+            JB FLAG_T0_4, EV_11          ; Si han pasado 4 segundos, activar EV11
+            JNB S_CAR, EV_10        ; Si no detecta el coche, activar EV10
+            MOV EVENTO, #00H
+            AJMP FIN_TABLE
+      GEN_ESTADO_4:                       ;eventos que se generan en el ESTADO 4
+            JB FC_RV_CENTRO, EV_12        ; Si FC_RV_CENTRO = 1, evento EV12
+            JB FLAG_T0_4, EV_11          ; Si FLAG_T2_04 está activado, evento EV11
+            JB FC_RV_BORDE, EV_13         ; Si FC_RV_BORDE = 1, evento EV13
+            MOV EVENTO, #00H
+            AJMP FIN_TABLE    
+      GEN_ESTADO_5:                       ;eventos que se generan en el ESTADO 5
+            JB FLAG_T0_4, EV_11          ; Si se ha avanzado 40 cm, EV11
+            JB FC_RH_TOP, EV_14           ; Si FC_RH_TOP = 1, rodillo horizontal retirado
+            JB S_CAR, EV_9                ; Si S_CAR = 1, detectar vehículo
+            JNB FLAG_T0_4, SALTO_EV20          ; Si S_CAR = 0, evento EV20
+            JNB S_CAR, EV_10        ; Si no detecta el coche, activar EV10
+            MOV EVENTO, #00H
+            AJMP FIN_TABLE
+
+            SALTO_EV20:
+            AJMP EV_20
+      GEN_ESTADO_6:                       ;eventos que se generan en el ESTADO 6
+            JB FC_RV_CENTRO, EV_12        ; Si FC_RV_CENTRO = 1, evento EV12
+            JB FLAG_T0_4, EV_11          ; Si FLAG_T2_04 está activado, evento EV11
+            JB FC_RV_BORDE, EV_13         ; Si FC_RV_BORDE = 1, evento EV13
+            MOV EVENTO, #00H
+            AJMP FIN_TABLE    
+      GEN_ESTADO_7:                       ;eventos que se generan en el ESTADO 7
+            JB S_CAR, EV_9                ; Si detecta el coche, activar EV9
+            ; EV19: Inicia movimiento hacia adelante
+            ; SETB FLAG_T2_04 para probar
+            JB FLAG_MOV_INIT, EV_19       ; Si FLAG_MOV_INIT está encendido, activar EV19
+            JB FLAG_T0_4, EV_11          ; Si han pasado 4 segundos, activar EV11
+            JNB S_CAR, EV_10        ; Si no detecta el coche, activar EV10
+            MOV EVENTO, #00H
+            AJMP FIN_TABLE
+
+      GEN_ESTADO_8:                       ;eventos que se generan en el ESTADO 8
+            JB S_CAR, EV_9
+            JNB S_CAR, EV_10
+            JB BPOS_START, EV_17
+            JNB S_PLAT, EV_1
+;-----------------------------------------------------------------------
+EV_1:
+      MOV EVENTO, #01H
+      AJMP FIN_TABLE
+EV_2:
+      MOV EVENTO, #02H
+      AJMP FIN_TABLE
+EV_3:
+      MOV EVENTO, #03H
+      AJMP FIN_TABLE
+EV_4:
+      MOV EVENTO, #04H
+      AJMP FIN_TABLE
+EV_5:
+      MOV EVENTO, #05H
+      AJMP FIN_TABLE
+EV_6:
+      MOV EVENTO, #06H
+      AJMP FIN_TABLE
+EV_7:
+      MOV EVENTO, #07H
+      AJMP FIN_TABLE
+EV_8:
+      MOV EVENTO, #08H
+      AJMP FIN_TABLE
+EV_9:
+      MOV EVENTO, #09H
+      CLR FLAG_MOV_INIT
+      AJMP FIN_TABLE
+EV_10:
+      MOV EVENTO, #0AH
+      AJMP FIN_TABLE
+EV_11:
+      MOV EVENTO, #0BH
+      AJMP FIN_TABLE
+EV_12:
+      MOV EVENTO, #0CH
+      CLR FLAG_T0_4
+      AJMP FIN_TABLE
+EV_13:
+      MOV EVENTO, #0DH
+      AJMP FIN_TABLE
+EV_14:
+      MOV EVENTO, #0EH
+      AJMP FIN_TABLE
+EV_15:
+      MOV EVENTO, #0FH
+      AJMP FIN_TABLE
+EV_16:
+      MOV EVENTO, #10H
+      AJMP FIN_TABLE
+EV_17:
+      MOV EVENTO, #11H
+      AJMP FIN_TABLE
+EV_18:
+      MOV EVENTO, #12H
+      AJMP FIN_TABLE
+EV_19:
+      MOV EVENTO, #13H
+      AJMP FIN_TABLE
+EV_20:
+      MOV EVENTO, #14H
+      AJMP FIN_TABLE
+      
+
+FIN_TABLE:
+      RET
+;-----------------------------------------------------------------------
+; Finite State Machine
+
+FSM:
+      MOV A,    ESTADO
+      RL A
+      MOV DPTR, #JMP_TABLE_FSM
+      JMP @A+DPTR
+
+
+      JMP_TABLE_FSM:
+      AJMP ESTADO_0
+      AJMP ESTADO_1
+      AJMP ESTADO_2
+      AJMP ESTADO_3
+      AJMP ESTADO_4
+      AJMP ESTADO_5
+      AJMP ESTADO_6
+      AJMP ESTADO_7
+      AJMP ESTADO_8
+
+      RET
+;-----------------------------------------------------------------------
+; ESTADOS
+
+ESTADO_0:
+      CJNE EVENTO, #01H, CHECK_00_EV2 ; Si evento no es EV1, verificar siguiente
+      ACALL ACCION_1                      ; Ejecutar acción AC1: SEM_VERDE=1
+      SJMP FIN_00
+
+      CHECK_00_EV2:
+            CJNE EVENTO, #02H, CHECK_00_EV3 ; Si evento no es EV2, verificar siguiente
+            ACALL ACCION_28                     ; Ejecutar acción AC28: Iniciar temporizador
+            SJMP FIN_00
+
+      CHECK_00_EV3:     ;FLAG_5s
+            JNB FLAG_T0_5, FIN_00        ; Si FLAG_T2_05 no está activado, finalizar
+            ACALL ACCION_2                 ; Ejecutar acción AC2: SEM_ROJO=1
+            ACALL ACCION_3                 ; Ejecutar acción AC3: SEM_VERDE=0
+            ACALL ACCION_29               ; Detener temporizador
+            MOV ESTADO, #01H               ; Transición a ESPERA_FICHA
+            CLR FLAG_T0_5
+            
+      FIN_00:
+            RET
+
+ESTADO_1:
+      CJNE EVENTO, #04H, CHECK_01_EV5 ; Si evento no es EV4, verificar siguiente
+      ACALL ACCION_5                  ; Ejecutar acción AC5: AL_START=1
+      SJMP FIN_01
+
+      CHECK_01_EV5:
+            CJNE EVENTO, #05H, CHECK_01_EV1 ; Si evento no es EV5, verificar siguiente
+            ACALL ACCION_6                      ; Ejecutar acción AC6: AL_START=0
+            ACALL ACCION_29                     ; Ejecutar acción AC29: Parar temporizador
+            ACALL ACCION_7                      ; Ejecutar acción AC7: Activar indicador de tipo de lavado
+            MOV ESTADO, #02H                    ; Transición a ESPERA_BOTÓN
+            SJMP FIN_01
+
+      CHECK_01_EV1:
+            CJNE EVENTO, #01H, FIN_01      ; Si evento no es EV1, finalizar
+            ACALL ACCION_6                 ; Ejecutar acción AC6: AL_START=0
+            ACALL ACCION_1                 ; Ejecutar acción AC1: SEM_VERDE=1
+            ACALL ACCION_4                 ; Ejecutar acción AC4: SEM_ROJO=0
+            MOV ESTADO, #00H               ; Transición a ESPERA
+      FIN_01:
+            RET
+
+ESTADO_2:
+      CJNE EVENTO, #06H, CHECK_02_EV7 ; Si evento no es EV6, verificar siguiente
+      ACALL ACCION_5                      ; Ejecutar acción AC5: AL_START=1
+      SJMP FIN_02
+
+      CHECK_02_EV7:
+            CJNE EVENTO, #07H, CHECK_02_EV8 ; Si evento no es EV7, verificar siguiente
+            ACALL ACCION_6                      ; Ejecutar acción AC6: AL_START=0
+            MOV ESTADO, #03H                    ; Transición a ENJABONADO
+            SETB FLAG_MOV_INIT
+            SJMP FIN_02
+
+      CHECK_02_EV8:
+            CJNE EVENTO, #08H, FIN_02      ; Si evento no es EV8, finalizar
+            ACALL ACCION_6                 ; Ejecutar acción AC6: AL_START=0
+            MOV ESTADO, #03H               ; Transición a ENJABONADO
+            SETB FLAG_MOV_INIT
+      FIN_02:
+            RET
+
+ESTADO_3:
+      CJNE EVENTO, #09H, CHECK_03_EV10          ; Si evento no es EV9, verificar siguiente
+      ACALL ACCION_8                                  ; Activar agua (EV_AGUA=1)
+      ACALL ACCION_9                                  ; Activar jabón (EV_JABON=1)
+      ACALL ACCION_12                                 ; Avanzar puente (BMOV_FRONT=1)
+      SJMP FIN_03
+
+      CHECK_03_EV10:
+            CJNE EVENTO, #0AH, CHECK_03_EV11    ; Si evento no es EV10, verificar siguiente
+            ACALL ACCION_10                           ; Desactivar agua (EV_AGUA=0)
+            ACALL ACCION_11                           ; Desactivar jabon (EV_JABON=0)
+            ACALL ACCION_28                           ; Activar temporizador para avanzar 40cm adicionales
+            ACALL ACCION_12                           ; Avanzar puente (BMOV_FRONT=1)
+            SJMP FIN_03
+
+      CHECK_03_EV11:
+            CJNE EVENTO, #0BH, CHECK_03_EV19    ; Si evento no es EV11, finalizar
+            ACALL ACCION_13                           ; Detener avance del puente (BMOV_FRONT=0)
+            ACALL ACCION_29                           ; Apagar temporizador
+            MOV ESTADO, #05H                          ; Transición a FROTADO_TRASERA
+            SJMP FIN_03
+
+      CHECK_03_EV19:
+            CJNE EVENTO, #13H, FIN_03
+            ACALL ACCION_12
+      FIN_03:
+            RET
+
+ESTADO_4:
+      CJNE EVENTO, #0BH, CHECK_04_EV12    ; Si evento no es EV11, verificar siguiente
+      CLR FLAG_T0_4
+      ACALL ACCION_16                     ; Activar RV_INTO=1
+      ACALL ACCION_20                     ; Activar PWM0 para la velocidad de rodillos
+      SJMP FIN_04
+
+      CHECK_04_EV12:
+            CJNE EVENTO, #0CH, CHECK_04_EV13    ; Si evento no es EV12, verificar siguiente
+            CLR FLAG_T0_4                ; Desactivar flag de 4s
+            ACALL ACCION_18                     ; Activar RV_OUTTO=1
+            ACALL ACCION_17                     ; Desactivar RV_INTO=0
+            SJMP FIN_04
+            
+      CHECK_04_EV13:
+            CJNE EVENTO, #0DH, FIN_04      ; Si evento no es EV13, finalizar
+            ACALL ACCION_19                ; Ejecutar acción AC19: RV_OUTTO=0
+            ACALL ACCION_21                ; Ejecutar acción AC22: PWM=0
+            MOV ESTADO, #05H               ; Transición a FROTADO_LATERAL
+
+      FIN_04:
+            RET
+
+ESTADO_5:
+      CJNE EVENTO, #14H, CHECK_05_EV9  ; Si evento no es EV20, verificar siguiente
+      ACALL ACCION_14                      ; Activar BMOV_BACK=1
+      ACALL ACCION_28
+      SJMP FIN_05
+
+      CHECK_05_EV9:
+            CJNE EVENTO, #09H, CHECK_05_EV10 ; Si evento no es EV9, verificar siguiente
+            CLR FLAG_T0_4
+            ACALL ACCION_15                ; Detener puente BMOV_BACK=0
+            ACALL ACCION_26                ; RH_DOWNTO
+            ACALL ACCION_16                ; RV_INTO
+            SJMP FIN_05
+      CHECK_05_EV10:
+            CJNE EVENTO, #0AH, CHECK_05_EV14 ; Si evento no es EV10, verificar siguiente
+            ACALL ACCION_24               ; Retirar rodillo horizontal hacia arriba
+            SJMP FIN_05
+      CHECK_05_EV14:
+            CJNE EVENTO, #0EH, CHECK_05_EV11 ; Si evento no es EV14, verificar siguiente
+            ACALL ACCION_25                ; Detener rodillo horizontal RH_UPTO=0
+            ACALL ACCION_28                ; Activar temporizador para avanzar 40cm
+            ACALL ACCION_14                ; Activar BMOV_BACK=1
+            SJMP FIN_05
+      CHECK_05_EV11:
+            CJNE EVENTO, #0BH, FIN_05     ; Si evento no es EV11, finalizar
+            ACALL ACCION_15               ; Detener puente BMOV_BACK=0
+      FIN_05:
+            RET
+
+ESTADO_6:
+      CJNE EVENTO, #0BH, CHECK_06_EV12    ; Si evento no es EV11, verificar siguiente
+      ACALL ACCION_16                     ; Activar RV_INTO=1
+      ACALL ACCION_20                     ; Activar PWM0 para la velocidad de rodillos
+      SJMP FIN_04
+
+      CHECK_06_EV12:
+            CJNE EVENTO, #0CH, CHECK_06_EV13    ; Si evento no es EV12, verificar siguiente
+            CLR FLAG_T0_4                ; Desactivar flag de 4s
+            ACALL ACCION_18                     ; Activar RV_OUTTO=1
+            ACALL ACCION_17                     ; Desactivar RV_INTO=0
+            SJMP FIN_04
+            
+      CHECK_06_EV13:
+            CJNE EVENTO, #0DH, FIN_04      ; Si evento no es EV13, finalizar
+            ACALL ACCION_19                ; Ejecutar acción AC19: RV_OUTTO=0
+            ACALL ACCION_21                ; Ejecutar acción AC22: PWM=0
+            MOV ESTADO, #07H               ; Transición a ACLARADO
+            SETB FLAG_MOV_INIT
+
+      FIN_06:
+            RET
+      
+ESTADO_7:
+      CJNE EVENTO, #09H, CHECK_07_EV10          ; Si evento no es EV9, verificar siguiente
+      ACALL ACCION_8                                  ; Activar agua (EV_AGUA=1)
+      ACALL ACCION_12                                 ; Avanzar puente (BMOV_FRONT=1)
+      SJMP FIN_07
+
+      CHECK_07_EV10:
+            CJNE EVENTO, #0AH, CHECK_07_EV11    ; Si evento no es EV10, verificar siguiente
+            ACALL ACCION_10                           ; Desactivar agua (EV_AGUA=0)
+            ACALL ACCION_28                           ; Activar temporizador para avanzar 40cm adicionales
+            ACALL ACCION_12                           ; Avanzar puente (BMOV_FRONT=1)
+            SJMP FIN_07
+
+      CHECK_07_EV11:
+            CJNE EVENTO, #0BH, CHECK_07_EV19    ; Si evento no es EV11, finalizar
+            ACALL ACCION_13                           ; Detener avance del puente (BMOV_FRONT=0)
+            ACALL ACCION_29                           ; Apagar temporizador
+            MOV ESTADO, #08H                          ; Transición a SECADO
+            SJMP FIN_07
+
+      CHECK_07_EV19:
+            CJNE EVENTO, #13H, FIN_07
+            ACALL ACCION_12
+      FIN_07:
+            RET
+      
+
+ESTADO_8:
+      CJNE EVENTO, #09H, CHECK_08_EV10          ; Si evento no es EV9, verificar siguiente
+      ACALL ACCION_22                           ; Iniciar secadores
+      ACALL ACCION_14                           ; Activar BMOV_BACK
+      SJMP FIN_08
+      CHECK_08_EV10:
+            CJNE EVENTO, #0AH, CHECK_08_EV17    ; Si evento no es EV10, verificar siguiente
+            ACALL ACCION_23                     ; Apagar secadores (PWM1=0)
+            ACALL ACCION_14                     ; Continuar moviendo el puente hacia atrás
+            SJMP FIN_08
+      CHECK_08_EV17:
+            CJNE EVENTO, #11H, CHECK_08_EV1           ; Si evento no es EV17, verificar siguiente
+            ACALL ACCION_15                     ; Detener puente (BMOV_BACK=0)
+            ACALL ACCION_23                     ; Apagar secadores
+            ACALL ACCION_30                     ; Iniciar parpadeo de semaforo verde
+            SJMP FIN_08
+      CHECK_08_EV1:
+            CJNE EVENTO, #01H, FIN_08           ; Si evento no es EV1, finalizar
+            ACALL ACCION_1                      ; Activar semaforo verde
+            MOV ESTADO, #00H
+      FIN_08:
+            RET
+;-----------------------------------------------------------------------
+; ACCIONES
+ACCION_0:
+      RET
+
+ACCION_1:
+      SETB SEM_VERDE          ; SEM_VERDE = 1
+      RET
+
+ACCION_2:
+      SETB SEM_ROJO           ; SEM_ROJO = 1
+      RET
+ACCION_3:
+      CLR SEM_VERDE           ; SEM_VERDE = 0
+      RET
+ACCION_4:               
+      CLR SEM_ROJO            ; SEM_ROJO = 0
+      RET
+ACCION_5:
+      SETB AL_START           ; AL_START = 1
+      RET
+ACCION_6:
+      CLR AL_START            ; AL_START = 0
+      RET
+      
+ACCION_7:               ; Activar indicador de tipo de lavado
+      JB FICHA_TIPO, LED_INTENSIVO
+      SETB LED_LNOR
+      RET
+      LED_INTENSIVO:
+      SETB LED_LINT
+      RET
+ACCION_8:
+      SETB EV_AGUA                ; Activar bomba de agua
+      RET
+      
+ACCION_9:
+      SETB EV_JABON               ; Activar bomba de jabón
+      RET
+ACCION_10:
+      CLR EV_AGUA                 ; Desactivar bomba de agua
+      RET
+ACCION_11:
+      CLR EV_JABON                ; Desactivar bomba de jabon
+      RET
+ACCION_12:
+      SETB BMOV_FRONT         ; Iniciar movimiento del puente hacia adelante
+      RET
+ACCION_13:
+      CLR BMOV_FRONT          ; Detener movimiento del puente
+      RET
+ACCION_14:
+      SETB BMOV_BACK          ; Mover el puente hacia atras
+      RET
+ACCION_15:
+      CLR BMOV_BACK           ; Detener movimiento del puente
+      RET
+ACCION_16:
+      SETB RV_INTO            ; Mover rodillos verticales hacia dentro
+      RET
+ACCION_17:
+      CLR RV_INTO       ; Detener rodillos verticales hacia dentro
+      RET
+ACCION_18:
+      SETB RV_OUTTO           ; Mover rodillos verticales hacia fuera
+      RET
+ACCION_19:
+      CLR RV_OUTTO            ; Detener rodillos verticales hacia fuera
+      RET
+ACCION_20: ; Activar PWM0 con la velocidad correspondiente
+      JNB FICHA_TIPO, PWM_NORMAL
+      MOV PWM0, #0x00            ; Velocidad 100% para lavado intenso
+      SETB PWM0
+      RET
+      PWM_NORMAL:
+            MOV PWM0, #0x7F          ; Velocidad 50% para lavado normal
+            SETB PWM0
+            RET   
+ACCION_21:
+      CLR PWM0          ; Apagar PWM0
+      RET
+ACCION_22: ; Activar PWM1 con la velocidad correspondiente
+      JB FICHA_TIPO, PWM_SECADO_INTENSIVO ; Si FICHA_TIPO = 1, lavado intensivo
+      MOV PWM1, #0x7F        ; PWM1 al 50% (lavado normal)
+      SETB PWM1              ; Activar ventiladores
+      RET
+      PWM_SECADO_INTENSIVO:
+            MOV PWM1, #0x26        ; PWM1 al 85% (lavado intensivo)
+            SETB PWM1              ; Activar ventiladores
+            RET         
+ACCION_23:
+      CLR PWM1          ; Apagar PWM1
+      RET
+ACCION_24:
+      SETB RH_UPTO            ; Subir rodillos horizontales
+      RET
+ACCION_25:
+      CLR RH_UPTO       ; Dejar de subir rodillos horizontales
+      RET
+ACCION_26:
+      SETB RH_DOWNTO          ; Bajar rodillos horizontales
+      RET
+ACCION_27:
+      CLR RH_DOWNTO           ; Dejar de bajar rodillos horizontales
+      RET
+ACCION_28:        ; Iniciar temporizador
+
+      MOV TMOD, #01H      ; Timer 0 en modo 1 (16 bits)
+      SETB TR0            ; Activa el Timer 0
+      SETB ET0            ; Habilita interrupción del Timer 0
+      RET
+ACCION_29:        ; Parar temporizador
+      ;Stop Timer 0
+      CLR TR0             ; Detener el Timer 0
+      ;CLR ET0             ; Deshabilitar interrupción del Timer 0
+      MOV TMOD, #01H      ; Timer 0 en modo 1 (16 bits)
+      MOV TH0, #00H       ; Precarga Valor alto para 0
+      MOV TL0, #00H       ; Valor bajo para 0
+      MOV R0, #00H        ; Contador de desbordamientos (ciclos) BAJO
+      MOV R1, #00H        ; Contador de desbordamientos (ciclos) BAJO
+      RET
+ACCION_30:
+      CPL SEM_VERDE     ; Alterna estado del semáforo verde (hace complemento a1)
+      ;ACALL TEMPORIZADOR_2S
+      RET
+;-----------------------------------------------------------------------
+
+; Rutina de interrupción del Timer 0
+TIMER0_ISR:
+    PUSH PSW
+    PUSH ACC            ; Guarda el acumulador
+    INC R0
+     
+    CJNE R0, #0, CONTINUAR
+    INC R1            ; Incrementa el byte más significativo
+    MOV R0, #0        ; Resetea el byte menos significativo
+  
+   
+    CONTINUAR:
+    MOV TH0, #00H     ; Vuelve a resetear la precarga
+    MOV TL0, #00H
+
+    ;5s
+    MOV A,ESTADO
+    CJNE A,#00H, CHECK_30S	; Si no está en estado 0, salta a 30 seg
+    
+    MOV A, R1
+    CJNE A, #00, CHECK_30S ; Verifica si R1 es 0
+    MOV A, R0
+    CJNE A, #76, CHECK_30S ; Verifica si R0 es 76
+
+
+    ;al alcanzar 5 segundos
+    SETB FLAG_T0_5   ; Activa la bandera de 5 segundos
+    AJMP FIN_ISR      ; Salta al final de la ISR	
+
+
+    CHECK_30S:
+    MOV A, R1
+    CJNE A, #01H, CHECK_60S ; Verifica si R1 es 1
+    MOV A, R0
+    CJNE A, #202, CHECK_60S  ; Verifica si R0 es 202
+
+    ; Al alcanzar 30 segundos
+    SETB FLAG_T0_30   ; Activa la bandera de 30 segundos
+    AJMP FIN_ISR      ; Salta al final de la ISR
+
+    CHECK_60S:
+    MOV A, R1
+    CJNE A, #03H, FIN_ISR ; Verifica si R1 es 3
+    MOV A, R0
+    CJNE A, #148, FIN_ISR  ; Verifica si R0 es 148
+
+    ; Al alcanzar 60 segundos
+    SETB FLAG_T0_60   ; Activa la bandera de 60 segundos
+
+    FIN_ISR:
+    POP PSW           ; Restaura los registros
+    POP ACC
+    RETI              ; Retorna de la interrupción
+
+
+   
+END

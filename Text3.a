@@ -2,49 +2,60 @@
 ORG 0x00
 AJMP INICIO          ; Salta al inicio del programa
 
-ORG 0X0B
+ORG 0X0B	; Vector de interrupción del Timer 0
 AJMP TIMER0_ISR
-
-ORG 0X7B         ; Vector de interrupción del Timer 0
+      
 INICIO:
-ACALL INIT
+	ACALL INIT
 MAIN:
-SJMP MAIN
+	SJMP MAIN	;bucle infinito en espera
 
 INIT:
     ; Inicialización del Timer 0
 
     MOV TMOD, #01H      ; Timer 0 en modo 1 (16 bits)
-    MOV TH0, #00H       ; Valor alto para 601
-    MOV TL0, #22H       ; Valor bajo para 601
-    MOV R0, #00H        ; Contador de desbordamientos
-    MOV R1, #00H
+    MOV TH0, #0       ; Precarga Valor alto para 0
+    MOV TL0, #00H      ; Valor bajo para 0
+    MOV R0, #00H        ; Contador de desbordamientos (ciclos) BAJO
+    MOV R1, #00H	;"Flag" 30 segundos completados
+    MOV R1,#00H		;ALTO
     SETB TR0            ; Activa el Timer 0
 
     ; Configuración de interrupciones
     SETB ET0            ; Habilita interrupción del Timer 0
-    SETB IE.7            ; Habilita interrupciones globales
+    SETB IE.7           ;Habilita interrupciones globales
     RET
 
 ; Rutina de interrupción del Timer 0
 TIMER0_ISR:
-    PUSH PSW
-    PUSH ACC            ; Guarda el acumulador
-
-    MOV TH0, #02H
-    MOV TL0, #59H
+    PUSH ACC	; Guarda el acumulador
+    PUSH PSW	;Guarda status
+    INC R0      ; Incrementa el contador en R0
     
-    INC R0              ; Incrementa el contador en R0
-    CJNE R0, #77, NO_5SEG ; ¿Llegó al final?
-    ;al alcanzar 5 segundos
-    MOV R1, #01H
-    CLR TR0
-    CLR ET0
+    ; Si R0 llega a 256, lo reseteamos y sumamos 1 a R2 (byte alto)
+    CJNE R0, #0, CONTINUAR
+    INC R2	; Incrementa el byte más significativo
+    MOV R0, #0	; Resetea el byte menos significativo
+    
+CONTINUAR:
+    MOV TH0, #00H ; Vuelve a resetear la precarga
+    MOV TL0, #00H
 
-    NO_5SEG:
-    POP ACC             ; Restaura el acumulador
-    POP PSW             ; Restaura el registro PSW
-    RETI                ; Retorna de la interrupción
+    ; Compara el valor del contador con 916 (3*256 + 148)
+    MOV A, R2
+    CJNE A, #1, NO_30SEG ; Verifica si R2 (byte alto) es 1 ; 60SEG: #3
+    MOV A, R0
+    CJNE A, #202, NO_30SEG ; Verifica si R0 (byte bajo) es 202 ; 60SEG: #148
+
+    ; Al alcanzar 30 segundos (458 ciclos)
+    MOV R1, #01H   ; Bandera de 30 segundos
+    CLR TR0        ; Detiene el Timer
+    CLR ET0        ; Desactiva la interrupción
+
+NO_30SEG:
+    POP PSW         ; Restaura los registros
+    POP ACC
+    RETI            ; Retorna de la interrupción
 
 END
 
